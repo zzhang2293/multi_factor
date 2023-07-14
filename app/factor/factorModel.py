@@ -485,7 +485,6 @@ class factorModel:
 
         return returnVal
 
-
     #计算持有期每组的组合收益率
     def EachGroupPortRet(self, all_period_data):
         eachgroup_show = {}
