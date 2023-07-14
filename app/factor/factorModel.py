@@ -9,6 +9,7 @@ import threading
 import time
 import datetime
 import warnings
+from collections import defaultdict
 
 class factorModel:
 
@@ -567,9 +568,12 @@ class factorModel:
             factorWeights = self.calcFactorWeights(self.factorWeightMode, factorNames, HistoricalIC=ICList, smartmode=self.factorWeightModeParams)
 
         #Step 3: Calculating Equity Scores
-        finalRank = {}
+        groupedProfit = defaultdict(list)
 
         # {'date' : [['000.SZ', '0001.SZ'], [2], [3]], 'date2' : }
+
+        ret_df = pd.DataFrame(returns)
+        ret_df.index, ret_df.columns = dates, stockNames
         
         for time in range(len(dates)):
             nameList, scoreList = [], []
@@ -581,22 +585,30 @@ class factorModel:
 
             equityGroups = self.rankEquity(nameList, scoreList)
 
-            finalRank[dates[time]] = equityGroups
+            for i in equityGroups:
+                val = ret_df.loc[dates[time], i].reset_index()
+                val.columns = ['ticker', 'profit']
+                groupedProfit[dates[time]].append(val)
 
         #Step 4: Calculate Daily Returns
-        daily_prof = daily_prof.drop(columns=['trade_data'])
+        #daily_prof = daily_prof.drop(columns=['trade_data'])
 
         '''
-        Format
-        var = finalRank:
-            {time(str) : [[Group1], [Group2], [Group3]], ...}
+        groupedProfit
+        dict
+            key = date (ex. '20230103')
+            value = list[pd.DataFrame * numGroups]
+                in each DataFrame, there are two column names: 'ticker' and 'profit'
 
-        var = daily_prof:
-            pd.DataFrame, col_name = ts_code, profit_daily, trade_date
-
+        
         '''
 
+<<<<<<< HEAD
         return  
+=======
+        print(groupedProfit['20230103'])
+        return groupedProfit
+>>>>>>> c12baabf917ffd635831c5699de11eb9edac866e
         
 
 st = time.process_time()
