@@ -73,6 +73,9 @@ class factorModel:
             delete_list.append(need_to_delete1)
             delete_list.append(need_to_delete2)
             stock_daily_profit = GetHoldPeriodPriceRet(hold_datelst, df_f2, stk_api)
+            
+            self.daily_profit = pd.concat([self.daily_profit, stock_daily_profit], axis=0, ignore_index=True)
+            
             stk_holdret_monthly = StockHoldRet(stock_daily_profit) # monthly profit, use for analysis
             df_f2["profit_month"] = stk_holdret_monthly["profit_month"]
             all_period_data[item] = df_f2
@@ -263,6 +266,7 @@ class factorModel:
             IC_info_lst = []
             thread_list = []
             delete_list = []
+            self.daily_profit = pd.DataFrame(columns=['trade_data', 'ts_code', 'profit_daily'])
             #print(self.bt_tradedate)
             for item in range(len(self.bt_tradedate)):
                 # process = threading.Thread(target=self.get_val, args=(item, all_period_data, IC_info_lst))
@@ -281,7 +285,7 @@ class factorModel:
             factor_3D, month_profit, stock_list, factor_MAP = transform_data(all_period_data, self.factor_name_lst)
 
 
-            return factor_3D, factor_MAP, month_profit, self.bt_tradedate, stock_list, self.factor_name_lst
+            return factor_3D, factor_MAP, month_profit, self.daily_profit, self.bt_tradedate, stock_list, self.factor_name_lst
     
         return run()
         
@@ -542,7 +546,7 @@ class factorModel:
     def run(self):
         
         #Step 1: Getting Info
-        scores, scoresMap, returns, dates, stockNames, factorNames = self.getData()
+        scores, scoresMap, returns, daily_prof, dates, stockNames, factorNames = self.getData()
     
         # #Step 2: Calculate Weights For Each Factor
         if self.factorWeightMode != 'smart':
@@ -562,12 +566,6 @@ class factorModel:
             factorWeights = self.calcFactorWeights(self.factorWeightMode, factorNames, HistoricalIC=ICList, smartmode=self.factorWeightModeParams)
 
         #Step 3: Calculating Equity Scores
-        groupedReturn, groupedAggValue = [[] * self.groupnum], [[1] * self.groupnum]
-
-        dailyReturns = pd.DataFrame(returns)
-        dailyReturns.columns = stockNames
-        dailyReturns.index = dates
-
         finalRank = {}
 
         # {'date' : [['000.SZ', '0001.SZ'], [2], [3]], 'date2' : }
@@ -584,8 +582,18 @@ class factorModel:
 
             finalRank[dates[time]] = equityGroups
 
-        for k, v in finalRank.items():
-            print(f" for {k}, {len(v)} groups, total = {sum([len(i) for i in v])}")
+        #Step 4: Calculate Daily Returns
+        daily_prof = daily_prof.drop(columns=['trade_data'])
+
+        '''
+        Format
+        var = finalRank:
+            {time(str) : [[Group1], [Group2], [Group3]], ...}
+
+        var = daily_prof:
+            pd.DataFrame, col_name = ts_code, profit_daily, trade_date
+
+        '''
 
         return finalRank
         
