@@ -67,7 +67,6 @@ class factorModel:
             pre_day = pre_bt_tradedate[item]
             cur_day = bt_tradedate[item]
             hold_datelst = hold_period[cur_day]
-            SetUniverse(universe_index, pre_day)
             df_f2= GetFactorFromDB(universe, factor_name_lst, pre_day, stk_api, factor_api) # df_f2: dataframe, index is ts_code, column is factors, period is monthly
             need_to_delete1 = delst_code_lst(pre_day, stk_api)
             need_to_delete2 = GetSuspendInfo(pre_day, stk_api)
@@ -110,24 +109,6 @@ class factorModel:
                     if (d2 - d1).days <= 200 and (d2 - d1).days >= -200:
                         result_lst.append(temp_code)
             return result_lst
-
-        def SetUniverse(universe_index:list, data_date:int):
-            if universe_index:
-                return []
-            else:
-                temp_uni = []
-                for idx in universe_index:
-                    index_con_df = self.stk_api.index_weight(idx, [data_date])
-                    if index_con_df.empty:
-                        print('select stock in %s' % idx, 'but the index_con_df is empty')
-                    index_con_lst = list(index_con_df['con_code'])
-                    temp_uni.extend(index_con_lst)
-                temp_uni_0 = list(set(temp_uni))  # 列表股票代码去重
-                susp_lst = GetSuspendInfo(data_date, self.stk_api)  # 某日全市场已经停牌得股票代码列表
-                delist = delst_code_lst(data_date, self.stk_api)    # 近期即将被退市的股票代码信息
-                black_list = susp_lst + delist
-                temp_uni_0 = [x for x in temp_uni_0 if x not in black_list] # 剔除在黑名单中的股票代码
-                return temp_uni_0
             
         # 因子标准化
         def StandarDize(df):
@@ -295,7 +276,7 @@ class factorModel:
                 all_period_data[day] = new_data
             for day in all_period_data:
                 #print(all_period_data[day])
-                filtered = all_period_data[day][all_period_data[day].index.isin(list(all_period_data[0].index))]
+                filtered = all_period_data[day][all_period_data[day].index.isin(list(set(all_period_data[0].index)))]
                 all_period_data[day] = filtered
             factor_3D, month_profit, stock_list, factor_MAP = transform_data(all_period_data, self.factor_name_lst)
 
@@ -425,7 +406,7 @@ class factorModel:
                 weight = np.array(weight.reshape(len(weight),))[0]
                 return weight.tolist()
             
-    def calcEquityScore(self, equityName:str, weights:list, scoresMap:list):
+    def calcEquityScore(self, equityName:str, weights:list, scoresMap:list, month:int):
 
         '''
             函数: calcEquityScores (non-async)
@@ -446,7 +427,7 @@ class factorModel:
                 N/A
         '''
 
-        return (equityName, np.dot(weights, scoresMap[equityName][0]))
+        return (equityName, np.dot(weights, scoresMap[equityName][month]))
 
     def rankEquity(self, equityNameList, equityScoreList) -> list[list[str]]:
 
@@ -488,27 +469,16 @@ class factorModel:
             #for now, equal weights
             return [1/len(equityBasket)] * len(equityBasket)
     
-    def calcBasketReturn(self, equityBasket:list, datesList:list, dailyReturns:list):
+    def calcBasketReturn(self, equityBasket:list, dateVal:str, dailyReturns:list):
 
         #get the basket weights
         basketWeights = self.calcBasketWeights(equityBasket)
 
-        basketReturns = []
-        basketValue = [1]
+        dailyEquityReturn = dailyReturns.loc[dateVal, equityBasket]
 
-        dailyReturns = pd.DataFrame(dailyReturns)
+        returnVal = np.dot(basketWeights, dailyEquityReturn.T)
 
-        for i in range(len(datesList)-1):
-            # list of daily returns for each equity name within 'equityBasket', we have that in self.dailyReturns
-            dailyEquityReturn = dailyReturns.loc[datesList[i]:datesList[i+1], equityBasket].tolist()
-
-            basketReturns.append(np.dot(basketWeights, dailyEquityReturn))
-
-            basketValue.append(basketValue[-1] * (1 + dailyEquityReturn))
-
-        basketValue.pop(0)
-
-        return basketReturns, basketValue
+        return returnVal
 
     def run(self):
         
@@ -525,13 +495,6 @@ class factorModel:
         elif self.factorWeightMode == 'smart':
             ICList = []
 
-            # length = len(factorNames)
-            # def calc_and_append(date, scores, returns):
-            #     ICList.append(self.calcIC(date, scores, returns))
-            # with Pool(length) as p:
-            #     p.starmap(calc_and_append, [(dates, scores[i], returns) for i in range(length)])
-            #     p.join()
-
             for i in range(len(factorNames)):
                 ICList.append(self.calcIC(dates, scores[i], returns)[1])
 
@@ -540,48 +503,43 @@ class factorModel:
             factorWeights = self.calcFactorWeights(self.factorWeightMode, factorNames, HistoricalIC=ICList, smartmode=self.factorWeightModeParams)
 
         #Step 3: Calculating Equity Scores
-        nameList, scoreList = [], []
+        groupedReturn, groupedAggValue = [[] * self.groupnum], [[1] * self.groupnum]
 
-        # length = len(stockNames)
-        # def calc_and_append(name, weight, score):
-        #     name, score = self.calcEquityScore(name, weight, score)
-        #     nameList.append(name)
-        #     scoreList.append(score)
-        # with Pool(length) as p:
-        #     p.starmap(calc_and_append, [(stockNames[i], factorWeights, scores[:,:,i]) for i in range(length)])
-        #     p.join()
+        dailyReturns = pd.DataFrame(returns)
+        dailyReturns.columns = stockNames
+        dailyReturns.index = dates
+
+        finalRank = {}
+
+        # {'date' : [['000.SZ', '0001.SZ'], [2], [3]], 'date2' : }
         
-        for i in range(len(stockNames)):
-            name, score = self.calcEquityScore(stockNames[i], factorWeights, scoresMap)
-            nameList.append(name)
-            scoreList.append(score)
+        for time in range(len(dates)):
+            nameList, scoreList = [], []
 
-        #Step 4: Group Equities
-        equityGroups = self.rankEquity(nameList, scoreList)
+            for i in range(len(stockNames)):
+                name, score = self.calcEquityScore(stockNames[i], factorWeights, scoresMap, time)
+                nameList.append(name)
+                scoreList.append(score)
 
-        #CHECKED//
+            equityGroups = self.rankEquity(nameList, scoreList)
 
-        #Step 5: Track Return 
-        groupedReturn, groupedAggValue = [], []
+            finalRank[dates[time]] = equityGroups
 
-        # def calc_and_append(equityBasket, dates, returns):
-        #     dailyReturn, AggValue = self.calcBasketReturn(equityBasket, dates, returns)
-        #     groupedReturn.append(dailyReturn)
-        #     groupedAggValue.append(AggValue)
-        
-        # with Pool(self.groupnum) as p:
-        #     p.starmap(calc_and_append, [(equityGroups[i], dates, returns) for i in range(self.groupnum)])
-        #     p.join()
+        for k, v in finalRank.items():
+            print(f" for {k}, {len(v)} groups, total = {sum([len(i) for i in v])}")
 
+        return finalRank
         
 
-        for i in equityGroups:
-            dailyReturn, AggValue = self.calcBasketReturn(i, dates, returns)
-            groupedReturn.append(dailyReturn)
-            groupedAggValue.append(AggValue)
-        
-        return groupedReturn, groupedAggValue
+st = time.process_time()
+t0 = time.time()
 
 m = factorModel()
 res = m.run()
-print(res)
+
+et = time.process_time()
+t1 = time.time()
+
+print(f'CPU Time: {et-st}s')
+print(f'Wall Time: {t1-t0}s')
+print(f'Wait Time = {(t1-t0) - (et-st)}s')
