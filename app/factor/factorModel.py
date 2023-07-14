@@ -10,7 +10,7 @@ import time
 import datetime
 import warnings
 from collections import defaultdict
-
+import math
 class factorModel:
 
     def __init__(self):
@@ -212,9 +212,6 @@ class factorModel:
             analysis_2D_monthly_return = []
             for month in all_period_data:
                 analysis_2D_monthly_return.append(list(all_period_data[month]['profit_month']))
-            #print(analysis_3D_list_label)
-            #print(analysis_2D_monthly_return)
-
             factor_map = {i:[] for i in all_period_data[0].index.tolist()}
 
             for df in all_period_data.values():
@@ -258,17 +255,19 @@ class factorModel:
                 e_idx = historyTradeDate.index(e_period)
                 if len(historyTradeDate[s_idx:e_idx+1]) >= 4:
                     self.hold_period[s_period] = historyTradeDate[s_idx:e_idx+1]
-        
+
+
+      
+
+
         def run():
             t0 = time.time()
             TradeDateDeal()
-            #print(self.hold_period)
             all_period_data = {}
             IC_info_lst = []
             thread_list = []
             delete_list = []
             self.daily_profit = pd.DataFrame(columns=['trade_data', 'ts_code', 'profit_daily'])
-            #print(self.bt_tradedate)
             for item in range(len(self.bt_tradedate)):
                 # process = threading.Thread(target=self.get_val, args=(item, all_period_data, IC_info_lst))
                 get_val(self.bt_tradedate, self.hold_period, self.pre_bt_tradedate, 
@@ -276,11 +275,9 @@ class factorModel:
                         item, all_period_data, self.stkapi, self.factor_api, delete_list)
             delete_list = [item for sublist in delete_list for item in sublist]
             for day in all_period_data:
-                #print(all_period_data[day])
                 new_data = all_period_data[day].drop(delete_list, errors='ignore')
                 all_period_data[day] = new_data
             for day in all_period_data:
-                #print(all_period_data[day])
                 filtered = all_period_data[day][all_period_data[day].index.isin(list(set(all_period_data[0].index)))]
                 all_period_data[day] = filtered
             factor_3D, month_profit, stock_list, factor_MAP = transform_data(all_period_data, self.factor_name_lst)
@@ -293,7 +290,7 @@ class factorModel:
     def calcIC(self, dateList:list, scoreList:list[list[float]], returnList:list[list[float]]):
 
         '''
-            函数: calcIC (non-async)
+            函数: calcIC (non-async)   TODO output method
             -------
             1) 摘要: 此函数用于计算单个因子的历史IC值
             2) 函数输入
@@ -533,6 +530,45 @@ class factorModel:
              
             return eachgroup_show              
 
+    def HistoryAccuRetAndIndicator(self, group_name:str, eachgroup_dailyret:pd.DataFrame):
+        temp_df = eachgroup_dailyret.copy()
+        temp_df.sort_values(by="trade_date",ascending=True,inplace=True)  # DataFrame trade_date dailyRet
+        temp_df.reset_index(drop=True,inplace=True)
+
+        # 计算每日净值
+        temp_df["net_values"] = np.nan  # DataFrame trade_date dailyRet net_values
+        for h in temp_df.index:
+            if h == 0:
+                temp_df.loc[h, "net_values"] = 1 + temp_df.loc[h, "dailyRet"]
+            else:
+                temp_df.loc[h, "net_values"] = temp_df.loc[h - 1, "net_values"] + temp_df.loc[h, "dailyRet"]
+
+        temp_df = temp_df[['trade_date', 'dailyRet', 'net_values']]
+        cur_date = temp_df.loc[0,"trade_date"]
+        init_date = datetime.datetime(int(cur_date[0:4]),int(cur_date[4:6]),int(cur_date[6:8])) - datetime.timedelta(days=1)
+        init_date = init_date.strftime("%Y%m%d")
+        init_df = pd.DataFrame([[init_date,0.0,1.0]],index=[0],columns=['trade_date', 'dailyRet', 'net_values'])
+        temp_df = pd.concat([init_df,temp_df],axis=0)
+        temp_df.reset_index(drop=True, inplace=True)
+
+        # 计算评价指标
+        year_ret = (list(temp_df["net_values"])[-1]-1) / (len(list(temp_df["net_values"]))-1) * 242  # 年化收益率
+        sharpe_ratio = temp_df["dailyRet"].mean() / temp_df["dailyRet"].std() * math.sqrt(242)       # 夏普比率
+
+        temp_df["max_drawn"] = np.nan
+        for n in temp_df.index:
+            temp_df.loc[n, "max_drawn"] = temp_df.loc[n, "net_values"] - temp_df.loc[0:n + 1, "net_values"].max()
+        max_drawn = temp_df["max_drawn"].min()                                                       # 最大回撤
+
+        year_ret = round(year_ret,4)
+        sharpe_ratio = round(sharpe_ratio, 4)
+        max_drawn = round(max_drawn, 4)
+        indicator_lst = [group_name,year_ret,sharpe_ratio,max_drawn]
+        temp_df = temp_df[["trade_date","net_values"]]
+        temp_df.set_index("trade_date",drop=True,inplace=True)
+        temp_df.columns = [group_name]
+        return temp_df,indicator_lst      
+
     def run(self):
         
         #Step 1: Getting Info
@@ -550,7 +586,6 @@ class factorModel:
 
             for i in range(len(factorNames)):
                 ICList.append(self.calcIC(dates, scores[i], returns)[1])
-
             ICList = pd.DataFrame(ICList).T
 
             factorWeights = self.calcFactorWeights(self.factorWeightMode, factorNames, HistoricalIC=ICList, smartmode=self.factorWeightModeParams)
@@ -562,14 +597,15 @@ class factorModel:
 
         ret_df = pd.DataFrame(returns)
         ret_df.index, ret_df.columns = dates, stockNames
-        
+        res_IC = {} 
         for time in range(len(dates)):
             nameList, scoreList = [], []
-
+            res_IC[time] = []  # 0 is stock name and 1 is IC , two list one to one
             for i in range(len(stockNames)):
                 name, score = self.calcEquityScore(stockNames[i], factorWeights, scoresMap, time)
                 nameList.append(name)
                 scoreList.append(score)
+            res_IC[time] = [nameList, scoreList]
 
             equityGroups = self.rankEquity(nameList, scoreList)
 
@@ -577,7 +613,8 @@ class factorModel:
                 val = ret_df.loc[dates[time], i].reset_index()
                 val.columns = ['ts_code', 'profit']
                 groupedProfit[dates[time]].append(val)
-
+                print("res ic")
+        print(res_IC)
         #Step 4: Calculate Daily Returns
         #daily_prof = daily_prof.drop(columns=['trade_data'])
 
@@ -590,9 +627,7 @@ class factorModel:
 
         
         '''
-
-        print(groupedProfit['20230103'])
-        print(groupedProfit)
+        #print(groupedProfit)
         self.EachGroupPortRet(groupedProfit)
         return groupedProfit
         
