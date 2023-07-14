@@ -480,6 +480,21 @@ class factorModel:
 
         return returnVal
 
+
+    #计算持有期每组的组合收益率
+    def EachGroupPortRet(self, all_period_data):
+        eachgroup_show = {}
+        for index in range(len(self.bt_tradedate)):
+            cur_trade_day = self.bt_tradedate[index]
+            if cur_trade_day not in all_period_data:
+                continue
+            cur_trade_day_data = all_period_data[cur_trade_day]
+            next_trade_day_data = {}
+            if index != len(self.bt_tradedate) - 1 and self.bt_tradedate[index + 1] in all_period_data:
+                next_trade_day_data
+
+
+
     def run(self):
         
         #Step 1: Getting Info
