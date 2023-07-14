@@ -537,7 +537,7 @@ class factorModel:
         
         #Step 1: Getting Info
         scores, scoresMap, returns, daily_prof, dates, stockNames, factorNames = self.getData()
-    
+
         # #Step 2: Calculate Weights For Each Factor
         if self.factorWeightMode != 'smart':
             if self.factorWeightMode == 'equal':
@@ -555,14 +555,18 @@ class factorModel:
 
             factorWeights = self.calcFactorWeights(self.factorWeightMode, factorNames, HistoricalIC=ICList, smartmode=self.factorWeightModeParams)
 
-        #Step 3: Calculating Equity Scores
+        #Step 3: Calculating Equity Scores & daily profit
         groupedProfit = defaultdict(list)
 
-        # {'date' : [['000.SZ', '0001.SZ'], [2], [3]], 'date2' : }
+        daily_prof = daily_prof.drop(columns=['trade_data'])
 
-        ret_df = pd.DataFrame(returns)
-        ret_df.index, ret_df.columns = dates, stockNames
-        
+        '''
+        dict
+            key = 挪仓日 (6个key)
+            value = list[]
+                lst里面有10个df, 每个df有三个col, 叫ts_code profit date
+        '''
+
         for time in range(len(dates)):
             nameList, scoreList = [], []
 
@@ -574,26 +578,15 @@ class factorModel:
             equityGroups = self.rankEquity(nameList, scoreList)
 
             for i in equityGroups:
-                val = ret_df.loc[dates[time], i].reset_index()
-                val.columns = ['ts_code', 'profit']
-                groupedProfit[dates[time]].append(val)
-
-        #Step 4: Calculate Daily Returns
-        #daily_prof = daily_prof.drop(columns=['trade_data'])
-
-        '''
-        groupedProfit
-        dict
-            key = date (ex. '20230103')
-            value = list[pd.DataFrame * numGroups]
-                in each DataFrame, there are two column names: 'ticker' and 'profit'
-
+                nameFilter = daily_prof[daily_prof['ts_code'].isin(i)]
+                try:
+                    print(dates[time], dates[time+1])
+                    dateFilter = nameFilter[(dates[time] <= nameFilter['trade_date']) & (nameFilter['trade_date'] < dates[time+1])]
+                except:
+                    print(dates[time])
+                    dateFilter = nameFilter[nameFilter['trade_date'] >= dates[time]]
+                groupedProfit[dates[time]].append(dateFilter.reset_index())
         
-        '''
-
-        print(groupedProfit['20230103'])
-        print(groupedProfit)
-        self.EachGroupPortRet(groupedProfit)
         return groupedProfit
         
 
