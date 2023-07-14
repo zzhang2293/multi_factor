@@ -474,7 +474,6 @@ class factorModel:
             #for now, equal weights
             return [1/len(equityBasket)] * len(equityBasket)
 
-
     #计算持有期每组的组合收益率
     def EachGroupPortRet(self, all_period_data):
         eachgroup_show = {}
