@@ -473,17 +473,6 @@ class factorModel:
     def calcBasketWeights(self, equityBasket:list) -> list[float]:
             #for now, equal weights
             return [1/len(equityBasket)] * len(equityBasket)
-    
-    def calcBasketReturn(self, equityBasket:list, dateVal:str, dailyReturns:list):
-
-        #get the basket weights
-        basketWeights = self.calcBasketWeights(equityBasket)
-
-        dailyEquityReturn = dailyReturns.loc[dateVal, equityBasket]
-
-        returnVal = np.dot(basketWeights, dailyEquityReturn.T)
-
-        return returnVal
 
 
     #计算持有期每组的组合收益率
@@ -587,7 +576,7 @@ class factorModel:
 
             for i in equityGroups:
                 val = ret_df.loc[dates[time], i].reset_index()
-                val.columns = ['ticker', 'profit']
+                val.columns = ['ts_code', 'profit']
                 groupedProfit[dates[time]].append(val)
 
         #Step 4: Calculate Daily Returns
@@ -603,12 +592,10 @@ class factorModel:
         
         '''
 
-<<<<<<< HEAD
-        return  
-=======
         print(groupedProfit['20230103'])
+        print(groupedProfit)
+        self.EachGroupPortRet(groupedProfit)
         return groupedProfit
->>>>>>> c12baabf917ffd635831c5699de11eb9edac866e
         
 
 st = time.process_time()
