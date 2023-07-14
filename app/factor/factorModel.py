@@ -498,11 +498,11 @@ class factorModel:
                 next_trade_day_data = all_period_data[self.bt_tradedate[index+1]]
 
             #iterate through the groups
-            for group_name in cur_trade_day_data:
-                cur_temp_df = cur_trade_day_data[group_name]
+            for group_name_id in range(len(cur_trade_day_data)):
+                cur_temp_df = cur_trade_day_data[group_name_id]
                 fee = 0
                 if next_trade_day_data:
-                    next_temp_df = next_trade_day_data[group_name]
+                    next_temp_df = next_trade_day_data[group_name_id]
                     cur_hold = list(cur_temp_df['ts_code'])
                     next_hold = list(next_temp_df['ts_code'])
                     cur_stknum = len(cur_hold)
@@ -518,10 +518,10 @@ class factorModel:
                 result_df.reset_index(drop=True,inplace=True)
                 result_df.loc[len(result_df['trade_date'])-1,"dailyRet"] = result_df.loc[len(result_df['trade_date'])-1,"dailyRet"] - fee # 扣除手续费
                 result_df = result_df[["trade_date","dailyRet"]]  
-                if group_name not in eachgroup_show:
-                    eachgroup_show[group_name] = result_df
+                if group_name_id not in eachgroup_show:
+                    eachgroup_show[group_name_id] = result_df
                 else:
-                    eachgroup_show[group_name] = pd.concat([eachgroup_show[group_name],result_df],axis=0) 
+                    eachgroup_show[group_name_id] = pd.concat([eachgroup_show[group_name_id],result_df],axis=0) 
 
 
             # 第一组 - 最后一组   多空对冲             
@@ -540,7 +540,8 @@ class factorModel:
             for key in eachgroup_show:
                 df_value = eachgroup_show[key]
                 df_value.drop_duplicates(subset="trade_date",keep="first",inplace=True)
-                eachgroup_show[key] = df_value  
+                eachgroup_show[key] = df_value 
+             
             return eachgroup_show              
 
     def run(self):
@@ -595,7 +596,7 @@ class factorModel:
 
         '''
 
-        return finalRank
+        return  
         
 
 st = time.process_time()
