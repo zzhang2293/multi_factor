@@ -491,9 +491,53 @@ class factorModel:
             cur_trade_day_data = all_period_data[cur_trade_day]
             next_trade_day_data = {}
             if index != len(self.bt_tradedate) - 1 and self.bt_tradedate[index + 1] in all_period_data:
-                next_trade_day_data
+                next_trade_day_data = all_period_data[self.bt_tradedate[index+1]]
+
+            #iterate through the groups
+            for group_name in cur_trade_day_data:
+                cur_temp_df = cur_trade_day_data[group_name]
+                fee = 0
+                if next_trade_day_data:
+                    next_temp_df = next_trade_day_data[group_name]
+                    cur_hold = list(cur_temp_df['ts_code'])
+                    next_hold = list(next_temp_df['ts_code'])
+                    cur_stknum = len(cur_hold)
+                    next_stknum = len(next_hold)
+                    max_holdnum = max(cur_stknum, next_stknum)
+                    diff_hold = [x for x in next_hold if x not in cur_hold]
+                    fee = len(diff_hold) * 2 * 0.0007 / max_holdnum
+                #计算该组每日组合收益率
+                result_s = cur_temp_df.groupby('trade_date')['daily_profit'].mean()
+                result_df = result_s.to_frame()
+                result_df.columns = ['dailyRet']
+                result_df["trade_date"] = list(result_df.index)
+                result_df.reset_index(drop=True,inplace=True)
+                result_df.loc[len(result_df['trade_date'])-1,"dailyRet"] = result_df.loc[len(result_df['trade_date'])-1,"dailyRet"] - fee # 扣除手续费
+                result_df = result_df[["trade_date","dailyRet"]]  
+                if group_name not in eachgroup_show:
+                    eachgroup_show[group_name] = result_df
+                else:
+                    eachgroup_show[group_name] = pd.concat([eachgroup_show[group_name],result_df],axis=0) 
 
 
+            # 第一组 - 最后一组   多空对冲             
+            last_group_name = 'group_%s'%(self.groupnum-1)
+            first_group_df = eachgroup_show['group_0']
+            last_group_df_1 = eachgroup_show[last_group_name]
+            last_group_df = last_group_df_1.copy()
+            last_group_df.columns = ['trade_date', 'last_dailyRet']
+            first_group_df.sort_values(by="trade_date",ascending=True,inplace=True)
+            last_group_df.sort_values(by="trade_date", ascending=True, inplace=True)     
+            long_short_df = pd.merge(first_group_df,last_group_df,on="trade_date",how="inner")  # trade_date dailyRet final_dailyRet
+            long_short_df["ret"] = long_short_df['dailyRet'] - long_short_df['final_dailyRet']
+            long_short_df = long_short_df[['trade_date','ret']]
+            long_short_df.columns = ['trade_date','dailyRet']            
+            eachgroup_show["longshort_hedge"] = long_short_df
+            for key in eachgroup_show:
+                df_value = eachgroup_show[key]
+                df_value.drop_duplicates(subset="trade_date",keep="first",inplace=True)
+                eachgroup_show[key] = df_value  
+            return eachgroup_show              
 
     def run(self):
         
