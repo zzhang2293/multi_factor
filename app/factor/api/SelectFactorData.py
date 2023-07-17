@@ -2,7 +2,7 @@ import time
 import datetime
 import pandas as pd
 import numpy as np
-from api.MongoConnect import MongoConnect
+from .MongoConnect import MongoConnect
 
 class GetFactorFromMongoDB():
     def __init__(self):

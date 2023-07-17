@@ -17,8 +17,10 @@ class factorModel:
         self.groupnum = 10         # 股票分组数
         self.trade_freq = 'm'      # 交易频率 "m" or "w"
         self.end = '20230630'      # 因子分析结束日期
-        self.start = '20200101'
-        self.factor_name_lst = ['Analyst_factor', 'daizhuerjiu', 'tps_sps']
+        self.start = '20201201' #hardcode this
+        self.factor_name_lst = ['Analyst_factor', 'NegMktValue', 'technology_factor', 'momentumn_factor', 'tps_sps', 
+                                'avgwght_momentum', 'seven_f', 'aShareholderZ', 'apbSkew', 'stopQ', 'aiDaNp30', 'sumRelatedCorp1Y',
+                                'daizhuerjiu', 'FlowerHidInForest']
         self.universe_index = ['000852.SH', '000905.SH', '000300.SH', '399303.SZ']
         self.universe = []             # 股票池列表
         self.hold_period = {}          # 历史持有期，字典中的键为调仓日、值为持有期交易日列表（按升序排序的区间交易日）
