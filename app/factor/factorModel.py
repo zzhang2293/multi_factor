@@ -291,9 +291,6 @@ class factorModel:
                 temp_uni_0 = [x for x in temp_uni_0 if x not in black_lst]
                 return temp_uni_0 
 
-      
-
-
         def run():
             t0 = time.time()
             TradeDateDeal()
@@ -317,7 +314,6 @@ class factorModel:
             #     all_period_data[day] = filtered
             #print(all_period_data)
             factor_3D, month_profit, stock_list, factor_MAP = transform_data(all_period_data, self.factor_name_lst)
-
 
             return factor_3D, factor_MAP, month_profit, self.daily_profit, self.bt_tradedate, stock_list, self.factor_name_lst
     
@@ -691,15 +687,6 @@ class factorModel:
         return groupedProfit
     
 
-# st = time.process_time()
-# t0 = time.time()
+m = factorModel()
 
-# m = factorModel()
-# res = m.run()
-
-# et = time.process_time()
-# t1 = time.time()
-
-# print(f'CPU Time: {et-st}s')
-# print(f'Wall Time: {t1-t0}s')
-# print(f'Wait Time = {(t1-t0) - (et-st)}s')
+res = m.run()
