@@ -17,7 +17,7 @@ class factorModel:
         self.groupnum = 10         # 股票分组数
         self.trade_freq = 'm'      # 交易频率 "m" or "w"
         self.end = '20230630'      # 因子分析结束日期
-        self.start = '20221215'
+        self.start = '20200101'
         self.factor_name_lst = ['Analyst_factor', 'daizhuerjiu', 'tps_sps']
         self.universe_index = ['000852.SH', '000905.SH', '000300.SH', '399303.SZ']
         self.universe = []             # 股票池列表
@@ -256,10 +256,6 @@ class factorModel:
                 if len(historyTradeDate[s_idx:e_idx+1]) >= 4:
                     self.hold_period[s_period] = historyTradeDate[s_idx:e_idx+1]
 
-
-      
-
-
         def run():
             t0 = time.time()
             TradeDateDeal()
@@ -400,11 +396,13 @@ class factorModel:
 
                 weights = [2**((i-self.ICEvalPeriod-1)/(self.ICDecayHalfLife))/np.sum([2**((-j)/self.ICDecayHalfLife) for j in range(1, self.ICEvalPeriod+1)]) for i in range(1, self.ICEvalPeriod+1)]
                 
-                for i in IC:
-                    IC.loc[:,i] = IC.loc[:,i] * weights
+                newIC = IC.copy()
+                
+                for i in newIC:
+                    newIC.loc[:,i] = newIC.loc[:,i] * weights
 
-                mat = nlg.inv(np.mat(IC.cov()))                     
-                weight = mat*np.mat(IC.mean()).reshape(len(mat),1)
+                mat = nlg.inv(np.mat(newIC.cov()))                     
+                weight = mat*np.mat(newIC.mean()).reshape(len(mat),1)
                 weight = np.array(weight.reshape(len(weight),))[0]
                 return weight.tolist()
             
@@ -631,17 +629,16 @@ class factorModel:
         
         return groupedProfit
     
-        
 
-st = time.process_time()
-t0 = time.time()
+# st = time.process_time()
+# t0 = time.time()
 
-m = factorModel()
-res = m.run()
+# m = factorModel()
+# res = m.run()
 
-et = time.process_time()
-t1 = time.time()
+# et = time.process_time()
+# t1 = time.time()
 
-print(f'CPU Time: {et-st}s')
-print(f'Wall Time: {t1-t0}s')
-print(f'Wait Time = {(t1-t0) - (et-st)}s')
+# print(f'CPU Time: {et-st}s')
+# print(f'Wall Time: {t1-t0}s')
+# print(f'Wait Time = {(t1-t0) - (et-st)}s')
