@@ -622,7 +622,6 @@ class factorModel:
         maxMonths = 12
 
         groupedProfit = defaultdict(list)
-
         if self.factorWeightMode != 'smart':
             if self.factorWeightMode == 'equal':
                 factorWeights = self.calcFactorWeights(self.factorWeightMode, factorNames)
@@ -638,6 +637,7 @@ class factorModel:
 
             ICList.index = dates
             ICList.columns = factorNames
+        IC_res = {}
 
         for month in range(minMonths, len(dates)):
             nameList = []
@@ -656,7 +656,7 @@ class factorModel:
                 if name:
                     nameList.append(name)
                     scoreList.append(score)
-
+            
             #group based on that month's scores
             equityGroups = self.rankEquity(nameList, scoreList)
 
