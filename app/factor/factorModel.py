@@ -11,16 +11,19 @@ import datetime
 import warnings
 from collections import defaultdict
 import math
+import numpy as np
+from sklearn.preprocessing import minmax_scale
+
 class factorModel:
 
     def __init__(self):
         self.groupnum = 10         # 股票分组数
         self.trade_freq = 'm'      # 交易频率 "m" or "w"
-        self.end = '20230630'      # 因子分析结束日期
+        self.end = '20230716'      # 因子分析结束日期
         self.start = '20201201' #hardcode this
         self.factor_name_lst = ['Analyst_factor', 'NegMktValue', 'technology_factor', 'momentumn_factor', 'tps_sps', 
-                                'avgwght_momentum', 'seven_f', 'aShareholderZ', 'apbSkew', 'stopQ', 'aiDaNp30', 'sumRelatedCorp1Y',
-                                'daizhuerjiu', 'FlowerHidInForest']
+                                'avgwght_momentum', 'seven_f', 'daizhuerjiu', 'FlowerHidInForest']#, 'aShareholderZ', 'apbSkew', 'stopQ', 'aiDaNp30', 'sumRelatedCorp1Y', 'FlowerHidInForest']
+        
         self.universe_index = ['000852.SH', '000905.SH', '000300.SH', '399303.SZ']
         self.universe = []             # 股票池列表
         self.hold_period = {}          # 历史持有期，字典中的键为调仓日、值为持有期交易日列表（按升序排序的区间交易日）
@@ -323,7 +326,7 @@ class factorModel:
 
         return dateList, ICList
     
-    def calcFactorWeights(self, mode:str, listOfFactors:list[str], listOfCategories:list[str] = [], HistoricalIC:list[list[float]] = [], smartmode = 'IRSolver') -> list:
+    def calcFactorWeights(self, mode:str, listOfFactors:list[str], listOfCategories:list[str] = [], HistoricalIC:list[list[float]] = [], smartmode = 'IRSolver', normalize = False) -> list:
 
         '''
             函数: calcFactorWeights (non-async)
@@ -383,12 +386,13 @@ class factorModel:
                 raise Exception('Error Smart Mode')
 
             IC = HistoricalIC.tail(min(self.ICEvalPeriod, HistoricalIC.shape[0]))
+            
 
             if smartmode == 'IRSolver':
                 mat = nlg.inv(np.mat(IC.cov()))                     
                 weight = mat*np.mat(IC.mean()).reshape(len(mat),1)
                 weight = np.array(weight.reshape(len(weight),))[0]
-                return weight.tolist()
+                weight = weight.tolist()
             
             elif smartmode == 'IRSolverWithDecay':
 
@@ -406,9 +410,11 @@ class factorModel:
                 mat = nlg.inv(np.mat(newIC.cov()))                     
                 weight = mat*np.mat(newIC.mean()).reshape(len(mat),1)
                 weight = np.array(weight.reshape(len(weight),))[0]
-                return weight.tolist()
+                weight = weight.tolist()
+
+            return np.tanh(minmax_scale(weight, feature_range=(-1, 1))) if normalize else weight
             
-    def calcEquityScore(self, equityName:str, weights:list, scoresMap:list, month:int):
+    def calcEquityScore(self, equityName:str, weights:list, scoresMap:dict, month:int):
 
         '''
             函数: calcEquityScores (non-async)
@@ -428,8 +434,15 @@ class factorModel:
             5) 案例
                 N/A
         '''
-
-        return (equityName, np.dot(weights, scoresMap[equityName][month]))
+        if equityName in scoresMap:
+            if month in scoresMap[equityName]:
+                return (equityName, np.dot(weights, scoresMap[equityName][month]))
+            else:
+                print(f'{equityName} NO FACTOR SCORE DATA for [MONTH {month}]')
+                return (None, None)
+        else:
+            print(f'{equityName} NO FACTOR SCORE DATA [ALL PERIOD]')
+            return (None, None)
 
     def rankEquity(self, equityNameList, equityScoreList) -> list[list[str]]:
 
@@ -574,13 +587,17 @@ class factorModel:
         #Step 1: Getting Info
         scores, scoresMap, returns, daily_prof, dates, stockNames, factorNames = self.getData()
 
-        # #Step 2: Calculate Weights For Each Factor
+        minMonths = 2
+        maxMonths = 12
+
+        groupedProfit = defaultdict(list)
+
         if self.factorWeightMode != 'smart':
             if self.factorWeightMode == 'equal':
                 factorWeights = self.calcFactorWeights(self.factorWeightMode, factorNames)
             elif self.factorWeightMode == 'category':
                 factorWeights = self.calcFactorWeights(self.factorWeightMode, factorNames, self.factorCategories)
-        
+                
         elif self.factorWeightMode == 'smart':
             ICList = []
 
@@ -588,33 +605,38 @@ class factorModel:
                 ICList.append(self.calcIC(dates, scores[i], returns)[1])
             ICList = pd.DataFrame(ICList).T
 
-            factorWeights = self.calcFactorWeights(self.factorWeightMode, factorNames, HistoricalIC=ICList, smartmode=self.factorWeightModeParams)
+            ICList.index = dates
+            ICList.columns = factorNames
 
-        #Step 3: Calculating Equity Scores & daily profit
+        for month in range(minMonths, len(dates)):
+            nameList = []
+            scoreList = []
 
-        groupedProfit = defaultdict(list)
+            #calculate weights based on historical info
+            if self.factorWeightMode == 'smart':
+                currList = ICList.loc[ICList.index[ICList.index <= dates[month]]]
+                if currList.shape[0] > maxMonths:
+                    currList = currList.iloc[-maxMonths:]
+                factorWeights = self.calcFactorWeights(self.factorWeightMode, factorNames, HistoricalIC=currList, smartmode=self.factorWeightModeParams)
 
-        daily_prof = daily_prof.drop(columns=['trade_data'])
-
-        for time in range(len(dates)):
-            nameList, scoreList = [], []
-
+            #calculate score based on that month's weights
             for i in range(len(stockNames)):
-                name, score = self.calcEquityScore(stockNames[i], factorWeights, scoresMap, time)
-                nameList.append(name)
-                scoreList.append(score)
+                name, score = self.calcEquityScore(stockNames[i], factorWeights, scoresMap, dates[month])
+                if name:
+                    nameList.append(name)
+                    scoreList.append(score)
 
+            #group based on that month's scores
             equityGroups = self.rankEquity(nameList, scoreList)
 
+            #add into groupedProfit
             for i in equityGroups:
                 nameFilter = daily_prof[daily_prof['ts_code'].isin(i)]
                 try:
-                    print(dates[time], dates[time+1])
-                    dateFilter = nameFilter[(dates[time] <= nameFilter['trade_date']) & (nameFilter['trade_date'] < dates[time+1])]
+                    dateFilter = nameFilter[(dates[month] <= nameFilter['trade_date']) & (nameFilter['trade_date'] < dates[month+1])]
                 except:
-                    print(dates[time])
-                    dateFilter = nameFilter[nameFilter['trade_date'] >= dates[time]]
-                groupedProfit[dates[time]].append(dateFilter.reset_index())
+                    dateFilter = nameFilter[nameFilter['trade_date'] >= dates[month]]
+                groupedProfit[dates[month]].append(dateFilter.reset_index())
 
         '''
         dict - groupedProfit

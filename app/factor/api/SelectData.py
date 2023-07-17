@@ -1,3 +1,4 @@
+import time
 import datetime
 import pandas as pd
 import numpy as np
@@ -98,7 +99,7 @@ class SelectFromMongo():
 
     def fillNaN(self,ResData, calendar_df):
         """
-        :param df:          DataFrame价格数据
+        :param ResData:          DataFrame价格数据
         :param calendar_df: DataFrame提取数据区间的交易日历
         :return:
         """
@@ -116,7 +117,8 @@ class SelectFromMongo():
         out_df.reset_index(drop=True, inplace=True)
         return out_df
 
-    def MktEqudAdjGet_min(self,secID:list,tradeDate:list,beginDate:str,endDate:str,field:list,freq_m = 'min_1'):
+    # 股票分钟数据，默认不对数据进行复权
+    def MktEqudAdjGet_min(self,secID:list,tradeDate:list,beginDate:str,endDate:str,field:list,is_agj = False,freq_m = 'min_1'):
         '''
         获取股票前复权行情数据
         :param secID:股票列表
@@ -124,9 +126,20 @@ class SelectFromMongo():
         :param beginDate:开始日期
         :param endDate:结束日期
         :param field:需要返回的字段
+        :param is_agj 如果只用到日内的价格数据，没有用到日间的价格数据则不需要对价格数据复权;或者只用到成交量和成交价格数据，也不需要对价格复权
         :param freq_m min_1  min_5 min_15 min_30 min_60
         :return: dataFrame复权后的行情数据
         '''
+
+        # 根据返回值是否有价格数据来判断是否要提取复权因子
+        is_needToAdjFactor = False # 默认价格不复权
+        if len(field)== 0 or "open" in field or 'close' in field or 'high' in field or 'low' in field or 'pre_close' in field:
+            is_needToAdjFactor = True
+
+
+        if not is_agj:
+            is_needToAdjFactor = False
+
         tradeDateNum = len(tradeDate)
         ResultList = []
 
@@ -146,45 +159,46 @@ class SelectFromMongo():
         for tID in secID:
             SelectDict["$or"].append({"ts_code": tID})
 
-        #取股票列表最新复权因子
-        TodayAdjDict = {}
-        TodaySelectDict = SelectDict.copy()
-        TodaySelectDict["trade_date"] = tLastTradeDateStr
-        TodayAdjRes = self.db.Select("StockBackSys","Stock_Adj_"+str(tLastTradeDate.year),TodaySelectDict,{"_id":0})
-        for tAdj in TodayAdjRes:
-            TodayAdjDict[tAdj["ts_code"]] = tAdj["adj_factor"]
+        if is_needToAdjFactor: # 当需要复权时
+            #取股票列表最新复权因子
+            TodayAdjDict = {}
+            TodaySelectDict = SelectDict.copy()
+            TodaySelectDict["trade_date"] = tLastTradeDateStr
+            TodayAdjRes = self.db.Select("StockBackSys","Stock_Adj_"+str(tLastTradeDate.year),TodaySelectDict,{"_id":0})
+            for tAdj in TodayAdjRes:
+                TodayAdjDict[tAdj["ts_code"]] = tAdj["adj_factor"]
 
-        #验证复权因子是否都存在
-        LossStockList = []
-        for tID in secID:
-            if tID in TodayAdjDict:
-                continue
-            else:
-                LossStockList.append(tID)
+            #验证复权因子是否都存在
+            LossStockList = []
+            for tID in secID:
+                if tID in TodayAdjDict:
+                    continue
+                else:
+                    LossStockList.append(tID)
 
-        #缺失的复权因子单独获取最新
-        for tLossID in LossStockList:
-            tStatus,tEndDate = self.GetStockTradeStatus(tLossID)
-            if tStatus == False:
-                tDelistDate = datetime.datetime.strptime(tEndDate,"%Y%m%d")
-                tLossResDict = {}
-                tLossSelectDict = {}
-                tLossSelectDict["ts_code"] = tLossID
-                i = 0
-                while len(tLossResDict) == 0:
-                    tCurDate = tDelistDate - datetime.timedelta(days=i)
-                    i += 1
-                    CurDateStr = tCurDate.strftime("%Y%m%d")
-                    CurYear = tCurDate.year
-                    tLossSelectDict["trade_date"] = CurDateStr
-                    LossRes = self.db.Select("StockBackSys", "Stock_Adj_" + str(CurYear),tLossSelectDict, {"_id": 0})
-                    for tRes in LossRes:
-                        tLossResDict[tLossID] = tRes["adj_factor"]
-                # 补上缺失
-                TodayAdjDict[tLossID] = tLossResDict[tLossID]
-            else:
-                print("异常点：",tLossID,"上市状态无最新Adj")
-                print(tLastTradeDateStr)
+            #缺失的复权因子单独获取最新
+            for tLossID in LossStockList:
+                tStatus,tEndDate = self.GetStockTradeStatus(tLossID)
+                if tStatus == False:
+                    tDelistDate = datetime.datetime.strptime(tEndDate,"%Y%m%d")
+                    tLossResDict = {}
+                    tLossSelectDict = {}
+                    tLossSelectDict["ts_code"] = tLossID
+                    i = 0
+                    while len(tLossResDict) == 0:
+                        tCurDate = tDelistDate - datetime.timedelta(days=i)
+                        i += 1
+                        CurDateStr = tCurDate.strftime("%Y%m%d")
+                        CurYear = tCurDate.year
+                        tLossSelectDict["trade_date"] = CurDateStr
+                        LossRes = self.db.Select("StockBackSys", "Stock_Adj_" + str(CurYear),tLossSelectDict, {"_id": 0})
+                        for tRes in LossRes:
+                            tLossResDict[tLossID] = tRes["adj_factor"]
+                    # 补上缺失
+                    TodayAdjDict[tLossID] = tLossResDict[tLossID]
+                else:
+                    print("异常点：",tLossID,"上市状态无最新Adj")
+                    print(tLastTradeDateStr)
 
         if tradeDateNum > 0:
             for tDateStr in tradeDate:
@@ -192,11 +206,12 @@ class SelectFromMongo():
                 tYear = tDate.year  # 定位数据库中表名
                 SelectDict["trade_date"] = tDateStr
 
-                # 取股票列表当日复权因子
-                AdjDict = {}
-                adjRes = self.db.Select("StockBackSys","Stock_Adj_"+str(tYear),SelectDict,{"_id":0})
-                for adj in adjRes:
-                    AdjDict[adj["ts_code"]] = adj["adj_factor"]
+                if is_needToAdjFactor:
+                    # 取股票列表当日复权因子
+                    AdjDict = {}
+                    adjRes = self.db.Select("StockBackSys","Stock_Adj_"+str(tYear),SelectDict,{"_id":0})
+                    for adj in adjRes:
+                        AdjDict[adj["ts_code"]] = adj["adj_factor"]
 
                 for item_stk in secID:
                     table_name = None
@@ -219,16 +234,17 @@ class SelectFromMongo():
 
                     res = self.db.Select(freq_m, table_name, SelectDict_temp, TitleDict)
                     for r in res:
-                        if "open" in r:
-                            r["open"] = self.AdjFactorStockData(r["open"],float(AdjDict[r["ts_code"]]),float(TodayAdjDict[r["ts_code"]]))
-                        if "high" in r:
-                            r["high"] = self.AdjFactorStockData(r["high"], float(AdjDict[r["ts_code"]]),float(TodayAdjDict[r["ts_code"]]))
-                        if "low" in r:
-                            r["low"] = self.AdjFactorStockData(r["low"], float(AdjDict[r["ts_code"]]),float(TodayAdjDict[r["ts_code"]]))
-                        if "close" in r:
-                            r["close"] = self.AdjFactorStockData(r["close"], float(AdjDict[r["ts_code"]]),float(TodayAdjDict[r["ts_code"]]))
-                        if "pre_close" in r:
-                            r["pre_close"] = self.AdjFactorStockData(r["pre_close"], float(AdjDict[r["ts_code"]]),float(TodayAdjDict[r["ts_code"]]))
+                        if is_needToAdjFactor:
+                            if "open" in r:
+                                r["open"] = self.AdjFactorStockData(r["open"],float(AdjDict[r["ts_code"]]),float(TodayAdjDict[r["ts_code"]]))
+                            if "high" in r:
+                                r["high"] = self.AdjFactorStockData(r["high"], float(AdjDict[r["ts_code"]]),float(TodayAdjDict[r["ts_code"]]))
+                            if "low" in r:
+                                r["low"] = self.AdjFactorStockData(r["low"], float(AdjDict[r["ts_code"]]),float(TodayAdjDict[r["ts_code"]]))
+                            if "close" in r:
+                                r["close"] = self.AdjFactorStockData(r["close"], float(AdjDict[r["ts_code"]]),float(TodayAdjDict[r["ts_code"]]))
+                            if "pre_close" in r:
+                                r["pre_close"] = self.AdjFactorStockData(r["pre_close"], float(AdjDict[r["ts_code"]]),float(TodayAdjDict[r["ts_code"]]))
                         ResultList.append(r)
 
         else:
@@ -238,36 +254,37 @@ class SelectFromMongo():
             # 跨表查询复权因子(用于复权因子跨表查找)
             tbeginYear = tbegin.year
             tendYear = tend.year
-            if tendYear - tbeginYear > 0:  # 不在同一年
-                tCurrentYear = tbeginYear
+            if is_needToAdjFactor:
+                if tendYear - tbeginYear > 0:  # 不在同一年
+                    tCurrentYear = tbeginYear
 
-                AdjDict = {}
-                while tCurrentYear <= tendYear:
-                    if tCurrentYear == tbeginYear:
-                        tThisYearBeginDate = tbegin
-                    else:
-                        tThisYearBeginDate = datetime.datetime(tCurrentYear, 1, 1)
-                    tThisYearBeginDateStr = tThisYearBeginDate.strftime("%Y%m%d")
+                    AdjDict = {}
+                    while tCurrentYear <= tendYear:
+                        if tCurrentYear == tbeginYear:
+                            tThisYearBeginDate = tbegin
+                        else:
+                            tThisYearBeginDate = datetime.datetime(tCurrentYear, 1, 1)
+                        tThisYearBeginDateStr = tThisYearBeginDate.strftime("%Y%m%d")
 
-                    if tCurrentYear == tendYear:
-                        tThisYearEndDate = tend
-                    else:
-                        tThisYearEndDate = datetime.datetime(tCurrentYear, 12, 31)
-                    tThisYearEndDateStr = tThisYearEndDate.strftime("%Y%m%d")
-                    SelectDict["trade_date"] = {"$gte": tThisYearBeginDateStr, "$lte": tThisYearEndDateStr}
+                        if tCurrentYear == tendYear:
+                            tThisYearEndDate = tend
+                        else:
+                            tThisYearEndDate = datetime.datetime(tCurrentYear, 12, 31)
+                        tThisYearEndDateStr = tThisYearEndDate.strftime("%Y%m%d")
+                        SelectDict["trade_date"] = {"$gte": tThisYearBeginDateStr, "$lte": tThisYearEndDateStr}
 
+                        # 取股票列表当日复权因子
+                        adjRes = self.db.Select("StockBackSys", "Stock_Adj_" + str(tCurrentYear), SelectDict, {})
+                        for adj in adjRes:
+                            AdjDict[adj["_id"]] = adj["adj_factor"]
+                        tCurrentYear += 1
+                else:
+                    SelectDict["trade_date"] = {"$gte": beginDate, "$lte": endDate}
                     # 取股票列表当日复权因子
-                    adjRes = self.db.Select("StockBackSys", "Stock_Adj_" + str(tCurrentYear), SelectDict, {})
+                    AdjDict = {}
+                    adjRes = self.db.Select("StockBackSys", "Stock_Adj_" + str(tbeginYear), SelectDict, {})
                     for adj in adjRes:
                         AdjDict[adj["_id"]] = adj["adj_factor"]
-                    tCurrentYear += 1
-            else:
-                SelectDict["trade_date"] = {"$gte": beginDate, "$lte": endDate}
-                # 取股票列表当日复权因子
-                AdjDict = {}
-                adjRes = self.db.Select("StockBackSys", "Stock_Adj_" + str(tbeginYear), SelectDict, {})
-                for adj in adjRes:
-                    AdjDict[adj["_id"]] = adj["adj_factor"]
 
             for item_stk in secID:
                 table_name = None
@@ -288,17 +305,19 @@ class SelectFromMongo():
 
                 res = self.db.Select(freq_m, table_name , SelectDict_temp, TitleDict)
                 for r in res:
-                    if "open" in r:
-                        r["open"] = self.AdjFactorStockData(r["open"], float(AdjDict[r["ts_code"]+"_"+r["trade_date"]]),float(TodayAdjDict[r["ts_code"]]))
-                    if "high" in r:
-                        r["high"] = self.AdjFactorStockData(r["high"], float(AdjDict[r["ts_code"]+"_"+r["trade_date"]]),float(TodayAdjDict[r["ts_code"]]))
-                    if "low" in r:
-                        r["low"] = self.AdjFactorStockData(r["low"], float(AdjDict[r["ts_code"]+"_"+r["trade_date"]]), float(TodayAdjDict[r["ts_code"]]))
-                    if "close" in r:
-                        r["close"] = self.AdjFactorStockData(r["close"], float(AdjDict[r["ts_code"]+"_"+r["trade_date"]]),float(TodayAdjDict[r["ts_code"]]))
-                    if "pre_close" in r:
-                        r["pre_close"] = self.AdjFactorStockData(r["pre_close"], float(AdjDict[r["ts_code"]+"_"+r["trade_date"]]),float(TodayAdjDict[r["ts_code"]]))
+                    if is_needToAdjFactor:
+                        if "open" in r:
+                            r["open"] = self.AdjFactorStockData(r["open"], float(AdjDict[r["ts_code"]+"_"+r["trade_date"]]),float(TodayAdjDict[r["ts_code"]]))
+                        if "high" in r:
+                            r["high"] = self.AdjFactorStockData(r["high"], float(AdjDict[r["ts_code"]+"_"+r["trade_date"]]),float(TodayAdjDict[r["ts_code"]]))
+                        if "low" in r:
+                            r["low"] = self.AdjFactorStockData(r["low"], float(AdjDict[r["ts_code"]+"_"+r["trade_date"]]), float(TodayAdjDict[r["ts_code"]]))
+                        if "close" in r:
+                            r["close"] = self.AdjFactorStockData(r["close"], float(AdjDict[r["ts_code"]+"_"+r["trade_date"]]),float(TodayAdjDict[r["ts_code"]]))
+                        if "pre_close" in r:
+                            r["pre_close"] = self.AdjFactorStockData(r["pre_close"], float(AdjDict[r["ts_code"]+"_"+r["trade_date"]]),float(TodayAdjDict[r["ts_code"]]))
                     ResultList.append(r)
+
 
         df = pd.DataFrame(ResultList)
 
@@ -310,6 +329,241 @@ class SelectFromMongo():
             for d in DateSql:
                 DateList.append(d)
             DateDF = pd.DataFrame(DateList)
+
+            if df.empty:
+                return df
+            else:
+                return self.fillNaN(df, DateDF)
+
+        # 股票分中数据，默认不对数据进行复权
+
+    # 股票分钟数据，数据库中trade_date需为int类型
+    def MktEqudAdjGet_min_int(self, secID: list, tradeDate: list, beginDate: str, endDate: str, field: list, is_agj=False,freq_m='min_1'):
+        '''
+        获取股票前复权行情数据
+        :param secID:股票列表
+        :param tradeDate:交易日期列表
+        :param beginDate:开始日期
+        :param endDate:结束日期
+        :param field:需要返回的字段
+        :param is_agj 如果只用到日内的价格数据，没有用到日间的价格数据则不需要对价格数据复权;或者只用到成交量和成交价格数据，也不需要对价格复权
+        :param freq_m min_1  min_5 min_15 min_30 min_60
+        :return: dataFrame复权后的行情数据
+        '''
+
+        # 根据返回值是否有价格数据来判断是否要提取复权因子
+        is_needToAdjFactor = False  # 默认价格不复权
+        if len(field) == 0 or "open" in field or 'close' in field or 'high' in field or 'low' in field or 'pre_close' in field:
+            is_needToAdjFactor = True
+
+        if not is_agj:
+            is_needToAdjFactor = False
+
+        tradeDateNum = len(tradeDate)
+        ResultList = []
+
+        # 确定返回字段
+        TitleDict = {}
+        TitleDict["_id"] = 0
+        for tKey in field:
+            TitleDict[tKey] = 1
+
+        # 获取最新交易日
+        tLastTradeDateStr = self.GetLastTradeDate()
+        tLastTradeDate = datetime.datetime.strptime(tLastTradeDateStr, "%Y%m%d")
+
+        # 顺序获取
+        SelectDict = {}
+        SelectDict["$or"] = []
+        for tID in secID:
+            SelectDict["$or"].append({"ts_code": tID})
+
+        if is_needToAdjFactor:  # 当需要复权时
+            # 取股票列表最新复权因子
+            TodayAdjDict = {}
+            TodaySelectDict = SelectDict.copy()
+            TodaySelectDict["trade_date"] = tLastTradeDateStr
+            TodayAdjRes = self.db.Select("StockBackSys", "Stock_Adj_" + str(tLastTradeDate.year), TodaySelectDict,
+                                         {"_id": 0})
+            for tAdj in TodayAdjRes:
+                TodayAdjDict[tAdj["ts_code"]] = tAdj["adj_factor"]
+
+            # 验证复权因子是否都存在
+            LossStockList = []
+            for tID in secID:
+                if tID in TodayAdjDict:
+                    continue
+                else:
+                    LossStockList.append(tID)
+
+            # 缺失的复权因子单独获取最新
+            for tLossID in LossStockList:
+                tStatus, tEndDate = self.GetStockTradeStatus(tLossID)
+                if tStatus == False:
+                    tDelistDate = datetime.datetime.strptime(tEndDate, "%Y%m%d")
+                    tLossResDict = {}
+                    tLossSelectDict = {}
+                    tLossSelectDict["ts_code"] = tLossID
+                    i = 0
+                    while len(tLossResDict) == 0:
+                        tCurDate = tDelistDate - datetime.timedelta(days=i)
+                        i += 1
+                        CurDateStr = tCurDate.strftime("%Y%m%d")
+                        CurYear = tCurDate.year
+                        tLossSelectDict["trade_date"] = CurDateStr
+                        LossRes = self.db.Select("StockBackSys", "Stock_Adj_" + str(CurYear), tLossSelectDict,
+                                                 {"_id": 0})
+                        for tRes in LossRes:
+                            tLossResDict[tLossID] = tRes["adj_factor"]
+                    # 补上缺失
+                    TodayAdjDict[tLossID] = tLossResDict[tLossID]
+                else:
+                    print("异常点：", tLossID, "上市状态无最新Adj")
+                    print(tLastTradeDateStr)
+
+        if tradeDateNum > 0:
+            for tDateStr in tradeDate:
+                tDate = datetime.datetime.strptime(tDateStr, "%Y%m%d")
+                tYear = tDate.year  # 定位数据库中表名
+                SelectDict["trade_date"] = tDateStr
+
+                if is_needToAdjFactor:
+                    # 取股票列表当日复权因子
+                    AdjDict = {}
+                    adjRes = self.db.Select("StockBackSys", "Stock_Adj_" + str(tYear), SelectDict, {"_id": 0})
+                    for adj in adjRes:
+                        AdjDict[adj["ts_code"]] = adj["adj_factor"]
+
+                for item_stk in secID:
+                    table_name = None
+                    if freq_m == 'min_1':
+                        table_name = item_stk + '_1min'
+                    elif freq_m == 'min_5':
+                        table_name = item_stk + '_5min'
+                    elif freq_m == 'min_15':
+                        table_name = item_stk + '_15min'
+                    elif freq_m == 'min_30':
+                        table_name = item_stk + '_30min'
+                    elif freq_m == 'min_60':
+                        table_name = item_stk + '_60min'
+
+                    # 筛选条件
+                    SelectDict_temp = {}
+                    SelectDict_temp['$or'] = []
+                    for dt in tradeDate:
+                        SelectDict_temp['$or'].append({'trade_date': int(dt)})
+
+                    res = self.db.Select(freq_m, table_name, SelectDict_temp, TitleDict)
+                    for r in res:
+                        if is_needToAdjFactor:
+                            if "open" in r:
+                                r["open"] = self.AdjFactorStockData(r["open"], float(AdjDict[r["ts_code"]]),
+                                                                    float(TodayAdjDict[r["ts_code"]]))
+                            if "high" in r:
+                                r["high"] = self.AdjFactorStockData(r["high"], float(AdjDict[r["ts_code"]]),
+                                                                    float(TodayAdjDict[r["ts_code"]]))
+                            if "low" in r:
+                                r["low"] = self.AdjFactorStockData(r["low"], float(AdjDict[r["ts_code"]]),
+                                                                   float(TodayAdjDict[r["ts_code"]]))
+                            if "close" in r:
+                                r["close"] = self.AdjFactorStockData(r["close"], float(AdjDict[r["ts_code"]]),
+                                                                     float(TodayAdjDict[r["ts_code"]]))
+                            if "pre_close" in r:
+                                r["pre_close"] = self.AdjFactorStockData(r["pre_close"], float(AdjDict[r["ts_code"]]),
+                                                                         float(TodayAdjDict[r["ts_code"]]))
+                        ResultList.append(r)
+
+        else:
+            tbegin = datetime.datetime.strptime(beginDate, "%Y%m%d")
+            tend = datetime.datetime.strptime(endDate, "%Y%m%d")
+
+            # 跨表查询复权因子(用于复权因子跨表查找)
+            tbeginYear = tbegin.year
+            tendYear = tend.year
+            if is_needToAdjFactor:
+                if tendYear - tbeginYear > 0:  # 不在同一年
+                    tCurrentYear = tbeginYear
+
+                    AdjDict = {}
+                    while tCurrentYear <= tendYear:
+                        if tCurrentYear == tbeginYear:
+                            tThisYearBeginDate = tbegin
+                        else:
+                            tThisYearBeginDate = datetime.datetime(tCurrentYear, 1, 1)
+                        tThisYearBeginDateStr = tThisYearBeginDate.strftime("%Y%m%d")
+
+                        if tCurrentYear == tendYear:
+                            tThisYearEndDate = tend
+                        else:
+                            tThisYearEndDate = datetime.datetime(tCurrentYear, 12, 31)
+                        tThisYearEndDateStr = tThisYearEndDate.strftime("%Y%m%d")
+                        SelectDict["trade_date"] = {"$gte": tThisYearBeginDateStr, "$lte": tThisYearEndDateStr}
+
+                        # 取股票列表当日复权因子
+                        adjRes = self.db.Select("StockBackSys", "Stock_Adj_" + str(tCurrentYear), SelectDict, {})
+                        for adj in adjRes:
+                            AdjDict[adj["_id"]] = adj["adj_factor"]
+                        tCurrentYear += 1
+                else:
+                    SelectDict["trade_date"] = {"$gte": beginDate, "$lte": endDate}
+                    # 取股票列表当日复权因子
+                    AdjDict = {}
+                    adjRes = self.db.Select("StockBackSys", "Stock_Adj_" + str(tbeginYear), SelectDict, {})
+                    for adj in adjRes:
+                        AdjDict[adj["_id"]] = adj["adj_factor"]
+
+            for item_stk in secID:
+                table_name = None
+                if freq_m == 'min_1':
+                    table_name = item_stk + '_1min'
+                elif freq_m == 'min_5':
+                    table_name = item_stk + '_5min'
+                elif freq_m == 'min_15':
+                    table_name = item_stk + '_15min'
+                elif freq_m == 'min_30':
+                    table_name = item_stk + '_30min'
+                elif freq_m == 'min_60':
+                    table_name = item_stk + '_60min'
+
+                # 筛选条件
+                SelectDict_temp = {}
+                SelectDict_temp["trade_date"] = {"$gte": int(beginDate), "$lte": int(endDate)}
+
+                res = self.db.Select(freq_m, table_name, SelectDict_temp, TitleDict)
+                for r in res:
+                    if is_needToAdjFactor:
+                        if "open" in r:
+                            r["open"] = self.AdjFactorStockData(r["open"],
+                                                                float(AdjDict[r["ts_code"] + "_" + str(r["trade_date"])]),
+                                                                float(TodayAdjDict[r["ts_code"]]))
+                        if "high" in r:
+                            r["high"] = self.AdjFactorStockData(r["high"],
+                                                                float(AdjDict[r["ts_code"] + "_" + str(r["trade_date"])]),
+                                                                float(TodayAdjDict[r["ts_code"]]))
+                        if "low" in r:
+                            r["low"] = self.AdjFactorStockData(r["low"],
+                                                               float(AdjDict[r["ts_code"] + "_" + str(r["trade_date"])]),
+                                                               float(TodayAdjDict[r["ts_code"]]))
+                        if "close" in r:
+                            r["close"] = self.AdjFactorStockData(r["close"],
+                                                                 float(AdjDict[r["ts_code"] + "_" + str(r["trade_date"])]),
+                                                                 float(TodayAdjDict[r["ts_code"]]))
+                        if "pre_close" in r:
+                            r["pre_close"] = self.AdjFactorStockData(r["pre_close"], float(
+                                AdjDict[r["ts_code"] + "_" + str(r["trade_date"])]), float(TodayAdjDict[r["ts_code"]]))
+                    ResultList.append(r)
+
+        df = pd.DataFrame(ResultList)
+
+        if tradeDateNum > 0:
+            return df
+        else:
+            DateList = []
+            DateSql = self.trade_cal(beginDate, endDate, 1)
+            for d in DateSql:
+                DateList.append(d)
+            DateDF = pd.DataFrame(DateList)
+            DateDF['cal_date'] = [int(ix) for ix in DateDF['cal_date']]
 
             if df.empty:
                 return df
@@ -502,9 +756,9 @@ class SelectFromMongo():
                             r["close"] = self.AdjFactorStockData(r["close"],
                                                                  float(AdjDict[r["ts_code"] + "_" + r["trade_date"]]),
                                                                  float(TodayAdjDict[r["ts_code"]]))
-                        if "pre_close" in r:
-                            r["pre_close"] = self.AdjFactorStockData(r["pre_close"], float(
-                                AdjDict[r["ts_code"] + "_" + r["trade_date"]]), float(TodayAdjDict[r["ts_code"]]))
+                        # if "pre_close" in r:
+                        #     r["pre_close"] = self.AdjFactorStockData(r["pre_close"], float(
+                        #         AdjDict[r["ts_code"] + "_" + r["trade_date"]]), float(TodayAdjDict[r["ts_code"]]))
                         ResultList.append(r)
                     tCurrentYear += 1
             else:  # 在同一年
@@ -533,10 +787,10 @@ class SelectFromMongo():
                         r["close"] = self.AdjFactorStockData(r["close"],
                                                              float(AdjDict[r["ts_code"] + "_" + r["trade_date"]]),
                                                              float(TodayAdjDict[r["ts_code"]]))
-                    if "pre_close" in r:
-                        r["pre_close"] = self.AdjFactorStockData(r["pre_close"],
-                                                                 float(AdjDict[r["ts_code"] + "_" + r["trade_date"]]),
-                                                                 float(TodayAdjDict[r["ts_code"]]))
+                    # if "pre_close" in r:
+                    #     r["pre_close"] = self.AdjFactorStockData(r["pre_close"],
+                    #                                              float(AdjDict[r["ts_code"] + "_" + r["trade_date"]]),
+                    #                                              float(TodayAdjDict[r["ts_code"]]))
                     ResultList.append(r)
 
         df = pd.DataFrame(ResultList)
@@ -1592,8 +1846,50 @@ class SelectFromMongo():
         df = pd.DataFrame(ResultList)
         return df
 
-
+# def func(df):
+#     m = df['open'].mean()
+#     s = df['open'].std()
+#     return [m,s]
+#
+# def func2(df):
+#     df.to_csv("./dfdfdfdf.csv")
+#     return 0
+#
 # if __name__ == '__main__':
 #     obj = SelectFromMongo()
-#     TEMP_DF = obj.GetBondInfoStatus([])
-#     TEMP_DF.to_csv('./temp.csv',index=None)
+#     # TEMP_DF = obj.MktEqudAdjGet_min(["000001.SZ","000002.SZ"], [], "20230625", "20230630",["trade_date", "ts_code", "trade_time", "vol", 'open', 'close', 'high', 'low'], is_agj=False, freq_m="min_1")
+#     # TEMP_DF['IndailyTime'] = TEMP_DF['trade_time'].str[-8:]
+#     # re = TEMP_DF.groupby(['trade_date','ts_code']).apply(func)
+#     # # print(re)
+#     # # print('......>')
+#     #
+#     # TEMP_DF_1 = obj.MktEqudAdjGet_min(["000858.SZ", "600519.SH"], [], "20230625", "20230630",["trade_date", "ts_code", "trade_time", "vol", 'open', 'close', 'high', 'low'],is_agj=False, freq_m="min_1")
+#     # TEMP_DF_1['IndailyTime'] = TEMP_DF_1['trade_time'].str[-8:]
+#     # re_1 = TEMP_DF_1.groupby(['trade_date', 'ts_code']).apply(func)
+#     # # print(re_1)
+#     # # print('......>')
+#     #
+#     # new_re = pd.concat([re,re_1],axis=0)
+#     # print(new_re)
+#     #
+#     # detail_list = []
+#     # for index in new_re.index:
+#     #     idx_lst = list(index)
+#     #     detail_list.append(idx_lst + new_re[index])
+#     # detail_df = pd.DataFrame(detail_list,columns=['trade_Date','ts_code','m','s'])
+#     # detail_df['sss'] = detail_df[['m','s']].std(1)
+#     # print(detail_df)
+#     # temP_df = detail_df[['m','sss']]
+#     # temP_df['sss'] = 0
+#     # print(detail_df)
+#     # print(temP_df)
+#
+#     # TEMP_DF = obj.MktEqudAdjGet_min(["000001.SZ", "000002.SZ","600519.SZ"], [], "20230625", "20230630",
+#     #                                 ["trade_date", "ts_code", "trade_time", "vol", 'open', 'close', 'high', 'low'],
+#     #                                 is_agj=False, freq_m="min_1")
+#     # TEMP_DF['IndailyTime'] = TEMP_DF['trade_time'].str[-8:]
+#     # TEMP_DF.sort_values(by=["trade_date",'IndailyTime'],ascending=[True,True],inplace=True)
+#     #
+#     # TEMP_DF.to_csv("./TEMP_DF.csv")
+#     # TEMP_DF.groupby(["trade_date","ts_code"]).apply(func2)
+
