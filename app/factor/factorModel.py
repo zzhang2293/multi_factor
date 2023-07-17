@@ -64,27 +64,36 @@ class factorModel:
 
         warnings.filterwarnings('ignore')
 
+        '''
+        get_val:
+            bt_tradedate: 调仓日列表 list   如 [20230103, 20230121, ...]
+            hold_period: 持有期字典   key 为交易日列表值（首月第一个交易日）value 为 list，值为此月交易日、
+            pre_bt_tradedate: 调仓日前一天列表 list
+            universe: 股票池
+        
+        '''
         def get_val(bt_tradedate:list, hold_period:dict, pre_bt_tradedate:list, 
                 universe:list, universe_index:list, factor_name_lst:list, item:int, all_period_data:dict
                 , stk_api:SelectFromMongo, factor_api: GetFactorFromMongoDB, delete_list:list):
             if bt_tradedate[item] not in hold_period:
                 return
-            
             pre_day = pre_bt_tradedate[item]
             cur_day = bt_tradedate[item]
             hold_datelst = hold_period[cur_day]
+            universe = SetUniverse(pre_day)
             df_f2= GetFactorFromDB(universe, factor_name_lst, pre_day, stk_api, factor_api) # df_f2: dataframe, index is ts_code, column is factors, period is monthly
-            need_to_delete1 = delst_code_lst(pre_day, stk_api)
-            need_to_delete2 = GetSuspendInfo(pre_day, stk_api)
-            delete_list.append(need_to_delete1)
-            delete_list.append(need_to_delete2)
+            
+            # need_to_delete1 = delst_code_lst(pre_day, stk_api)
+            # need_to_delete2 = GetSuspendInfo(pre_day, stk_api)
+            # delete_list.append(need_to_delete1)
+            # delete_list.append(need_to_delete2)
             stock_daily_profit = GetHoldPeriodPriceRet(hold_datelst, df_f2, stk_api)
             
             self.daily_profit = pd.concat([self.daily_profit, stock_daily_profit], axis=0, ignore_index=True)
             
             stk_holdret_monthly = StockHoldRet(stock_daily_profit) # monthly profit, use for analysis
             df_f2["profit_month"] = stk_holdret_monthly["profit_month"]
-            all_period_data[item] = df_f2
+            all_period_data[bt_tradedate[item]] = df_f2
 
         def GetSuspendInfo(trade_date, db_api, c=1):
             result_s = []  # 停牌股票列表
@@ -172,7 +181,8 @@ class factorModel:
             factor_df = factor_api.GetStockFactor(data_date, universe, factor_name_lst)
             factor_df.fillna(0, inplace=True)
             factor_df = StandarDize(WinSorizeNewMethod(factor_df))
-
+            cls_name = list(factor_df.columns)[0]
+            factor_df.sort_index(ascending=True)
             return factor_df
 
         # 从数据库获取持有期股票每日收益率数据
@@ -217,13 +227,15 @@ class factorModel:
             analysis_2D_monthly_return = []
             for month in all_period_data:
                 analysis_2D_monthly_return.append(list(all_period_data[month]['profit_month']))
-            factor_map = {i:[] for i in all_period_data[0].index.tolist()}
+            factor_map = {}
+            for time_period_data in all_period_data:
+                for index, row in all_period_data[time_period_data].iterrows():
+                    if index not in factor_map:
+                        factor_map[index] = {time_period_data: row[factor_name_lst].tolist()}
+                    else:    
+                        factor_map[index][time_period_data] = row[factor_name_lst].tolist()
 
-            for df in all_period_data.values():
-                for ticker in df.index.tolist():
-                    factor_map[ticker].append(df.loc[ticker, factor_name_lst])           
-
-            return analysis_3D_list_label, analysis_2D_monthly_return, all_period_data[0].index.tolist(), factor_map
+            return analysis_3D_list_label, analysis_2D_monthly_return, list(factor_map.keys()), factor_map
 
         def TradeDateDeal():
             his_trade_df = self.stkapi.trade_cal(self.start, self.end)
@@ -260,6 +272,27 @@ class factorModel:
                 e_idx = historyTradeDate.index(e_period)
                 if len(historyTradeDate[s_idx:e_idx+1]) >= 4:
                     self.hold_period[s_period] = historyTradeDate[s_idx:e_idx+1]
+        
+        def SetUniverse(data_date):
+            if not self.universe_index:
+                return
+            else:
+                temp_uni = []
+                for idx in self.universe_index:
+                    index_con_df = self.stkapi.index_weight(idx, [data_date])
+                    if index_con_df.empty:
+                        print('select stock in %s' % idx, 'but the index_con_df is empty')
+                    index_con_df = list(index_con_df['con_code'])
+                    temp_uni.extend(index_con_df)
+                temp_uni_0 = list(set(temp_uni))
+                susp_lst = GetSuspendInfo(data_date, self.stkapi)
+                delist = delst_code_lst(data_date, self.stkapi)
+                black_lst = susp_lst = delist
+                temp_uni_0 = [x for x in temp_uni_0 if x not in black_lst]
+                return temp_uni_0 
+
+      
+
 
         def run():
             t0 = time.time()
@@ -274,13 +307,15 @@ class factorModel:
                 get_val(self.bt_tradedate, self.hold_period, self.pre_bt_tradedate, 
                         self.universe, self.universe_index, self.factor_name_lst, 
                         item, all_period_data, self.stkapi, self.factor_api, delete_list)
-            delete_list = [item for sublist in delete_list for item in sublist]
-            for day in all_period_data:
-                new_data = all_period_data[day].drop(delete_list, errors='ignore')
-                all_period_data[day] = new_data
-            for day in all_period_data:
-                filtered = all_period_data[day][all_period_data[day].index.isin(list(set(all_period_data[0].index)))]
-                all_period_data[day] = filtered
+            # delete_list = [item for sublist in delete_list for item in sublist]
+            
+            # for day in all_period_data:
+            #     new_data = all_period_data[day].drop(delete_list, errors='ignore')
+            #     all_period_data[day] = new_data
+            # for day in all_period_data:
+            #     filtered = all_period_data[day][all_period_data[day].index.isin(list(set(all_period_data[0].index)))]
+            #     all_period_data[day] = filtered
+            #print(all_period_data)
             factor_3D, month_profit, stock_list, factor_MAP = transform_data(all_period_data, self.factor_name_lst)
 
 
@@ -636,7 +671,9 @@ class factorModel:
                     dateFilter = nameFilter[(dates[month] <= nameFilter['trade_date']) & (nameFilter['trade_date'] < dates[month+1])]
                 except:
                     dateFilter = nameFilter[nameFilter['trade_date'] >= dates[month]]
-                groupedProfit[dates[month]].append(dateFilter.reset_index())
+                df = dateFilter.reset_index()
+                df = df.drop(columns=['index', 'trade_data'])
+                groupedProfit[dates[month]].append(df)
 
         '''
         dict - groupedProfit
@@ -645,11 +682,11 @@ class factorModel:
                 lst里面有10个df, 每个df有三个col, 叫ts_code profit date
         '''
     
-        res_IC = defaultdict(list)
-        for time in range(len(dates)):
-            res_IC[time] = [nameList, scoreList]
+        # res_IC = defaultdict(list)
+        # for time in range(len(dates)):
+        #     res_IC[time] = [nameList, scoreList]
 
-        self.EachGroupPortRet(groupedProfit)
+        # self.EachGroupPortRet(groupedProfit)
         
         return groupedProfit
     
