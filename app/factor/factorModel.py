@@ -46,20 +46,15 @@ class factorModel:
         '''
         Return Type
 
-        1. 3D array of factor scores - list[list[list[float]]]
-            - dim 1: factors
-            - dim 2: dates
-            - dim 3: stocks
-        2. map of scores 
-        2. 2D array of daily returns - list[list[float]]
-            - dim 1: dates
-            - dim 2: stocks
-        3. 1D array of dates - list[str]
-            - 和 1的dim2 还有 2的dim1 顺序对应
-        4. 1D array of stock names - list[str]
-            - 和 1的dim3 还有 2的dim2 顺序对应
-        5. 1D array of factor names - list[str]
-            - 和 1的dim1 顺序对应    
+        Factor_3D
+        {MonthX : {StockX : [factor1, factor2, factor3, ..., monthly_return]}}
+
+        Factor_MAP
+        {StockX : {MonthX : [factor1Score, factor2Score, ...]}}
+
+        self.daily_profit [不用改]
+
+        self.factor_name_lst    
         '''
 
         warnings.filterwarnings('ignore')
@@ -637,7 +632,13 @@ class factorModel:
 
             ICList.index = dates
             ICList.columns = factorNames
-        IC_res = {}
+        
+        '''
+        {MONTH: (IC, IC_total), ...}
+        '''
+
+        totalIC = 0
+        combinedIC = {}
 
         for month in range(minMonths, len(dates)):
             nameList = []
@@ -671,6 +672,16 @@ class factorModel:
                 df = df.drop(columns=['index', 'trade_data'])
                 groupedProfit[dates[month]].append(df)
 
+            #calculate monthly IC
+            returnArr = []
+            for i in nameList:
+                returnArr.append(returns[month][stockNames.index(i)])
+
+            currIC = np.corrcoef(returnArr, scoreList)[0,1]
+            
+            totalIC += currIC
+            combinedIC[month] = (currIC, totalIC)
+
         '''
         dict - groupedProfit
             key = 挪仓日 (6个key)
@@ -684,9 +695,6 @@ class factorModel:
 
         # self.EachGroupPortRet(groupedProfit)
         
-        return groupedProfit
+        return combinedIC, totalIC
     
 
-m = factorModel()
-
-res = m.run()
