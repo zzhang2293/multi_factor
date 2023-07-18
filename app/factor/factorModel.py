@@ -43,19 +43,7 @@ class factorModel:
 
     def getData(self):
 
-        '''
-        Return Type
-
-        Factor_3D
-        {MonthX : {StockX : [factor1, factor2, factor3, ..., monthly_return]}}
-
-        Factor_MAP
-        {StockX : {MonthX : [factor1Score, factor2Score, ...]}}
-
-        self.daily_profit [不用改]
-
-        self.factor_name_lst    
-        '''
+        
 
         warnings.filterwarnings('ignore')
 
@@ -609,6 +597,22 @@ class factorModel:
         return temp_df,indicator_lst      
 
     def run(self):
+
+
+
+        '''
+        Return Type
+
+        Factor_3D
+        {MonthX : {StockX : [factor1, factor2, factor3, ..., monthly_return]}}
+
+        Factor_MAP
+        {StockX : {MonthX : [factor1Score, factor2Score, ...]}}
+
+        self.daily_profit [不用改]
+
+        self.factor_name_lst    
+        '''
         
         #Step 1: Getting Info
         scores, scoresMap, returns, daily_prof, dates, stockNames, factorNames = self.getData()
