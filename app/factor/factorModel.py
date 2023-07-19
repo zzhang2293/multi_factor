@@ -20,7 +20,7 @@ class factorModel:
         self.groupnum = 10         # 股票分组数
         self.trade_freq = 'm'      # 交易频率 "m" or "w"
         self.end = '20230716'      # 因子分析结束日期
-        self.start = '20201201' #hardcode this
+        self.start = '20211201' #hardcode this
         self.factor_name_lst = ['Analyst_factor', 'NegMktValue', 'technology_factor', 'momentumn_factor', 'tps_sps', 
                                 'avgwght_momentum', 'seven_f', 'daizhuerjiu', 'FlowerHidInForest']#, 'aShareholderZ', 'apbSkew', 'stopQ', 'aiDaNp30', 'sumRelatedCorp1Y', 'FlowerHidInForest']
         
@@ -35,15 +35,13 @@ class factorModel:
         self.lock = threading.Lock()
         self.stkapi = SelectFromMongo()
 
-        self.factorWeightMode = 'smart'
+        self.factorWeightMode = 'equal'
         self.factorCategories = [1, 1, 2]
         self.factorWeightModeParams = 'IRSolver'
         self.ICDecayHalfLife = 2
         self.ICEvalPeriod = 10
 
     def getData(self):
-
-        
 
         warnings.filterwarnings('ignore')
 
@@ -64,20 +62,31 @@ class factorModel:
             cur_day = bt_tradedate[item]
             hold_datelst = hold_period[cur_day]
             universe = SetUniverse(pre_day)
+            start = time.time()
             df_f2= GetFactorFromDB(universe, factor_name_lst, pre_day, stk_api, factor_api) # df_f2: dataframe, index is ts_code, column is factors, period is monthly
-            
-            # need_to_delete1 = delst_code_lst(pre_day, stk_api)
-            # need_to_delete2 = GetSuspendInfo(pre_day, stk_api)
-            # delete_list.append(need_to_delete1)
-            # delete_list.append(need_to_delete2)
+            #print('getDataFrom db', time.time() - start)
+            start = time.time()
             stock_daily_profit = GetHoldPeriodPriceRet(hold_datelst, df_f2, stk_api)
-            
+            #print('GetHoldPeriodPricedRet', time.time() - start)
+
             self.daily_profit = pd.concat([self.daily_profit, stock_daily_profit], axis=0, ignore_index=True)
-            
+            # for val in self.daily_profit['profit_daily']:
+            #     if math.isnan(val):
+            #         print('has nan in daily')
+            #         exit(1)
             stk_holdret_monthly = StockHoldRet(stock_daily_profit) # monthly profit, use for analysis
-            df_f2["profit_month"] = stk_holdret_monthly["profit_month"]
+
+            df_f2 = pd.merge(df_f2, stk_holdret_monthly, left_index=True, right_index=True)
+            #print(len(df_f2))
+        
+            
+            for val in df_f2['profit_month']:
+                if math.isnan(val):
+                    print('DF-f2 has nan')
+                    exit(1)
             all_period_data[bt_tradedate[item]] = df_f2
 
+            
         def GetSuspendInfo(trade_date, db_api, c=1):
             result_s = []  # 停牌股票列表
 
@@ -181,44 +190,59 @@ class factorModel:
             ret_group_dict = {}
 
             stock_list = list(stock_factor_lst.index)
-            his_data = stk_api.MktEqudAdjGet(stock_list, [], s_date, e_date, ['trade_date','ts_code','close','pre_close'])
+            his_data = stk_api.MktEqudAdjGet(stock_list, [], s_date, e_date, ['trade_date','ts_code','pct_chg'], is_adj=False)
+
             his_data.dropna(inplace=True)
-            his_data['profit_daily'] = his_data['close'] / his_data['pre_close'] - 1
+
+            his_data['profit_daily'] = his_data['pct_chg'] / 100
             his_data = his_data[['trade_date', 'ts_code', 'profit_daily']]
+
             return his_data
+        
+        def StockHoldRet(stock_daily_profit: pd.DataFrame) -> pd.DataFrame:
+            # transform to cumulative product
+            stock_daily_profit['profit_daily_plus_one'] = stock_daily_profit['profit_daily'] + 1
+            
+            monthly_profit = stock_daily_profit.groupby('ts_code')['profit_daily_plus_one'].prod() - 1
 
-        #持有期分层组合中每只股票的持有收益率计算
-        def StockHoldRet(stock_daily_profit:pd.DataFrame):
-            '''
-            :param stkdailyret_group_dict: dict 键为分组名 值为DataFrame 持有期分组的每只股票的每日收益率
-            :return: dict 健为分层名，值为DataFrame(行索引为股票代码，唯一列为股票区间累计收益率)
-            '''
+            res = monthly_profit.reset_index() 
+            res.set_index('ts_code', inplace=True)
 
-            res = stock_daily_profit.groupby('ts_code')['profit_daily'].sum().to_frame()
             res.columns = ['profit_month']
+
             return res
 
         # transform the data from a dict of dataframe to a 3D array
         def transform_data(all_period_data:dict, factor_name_lst:list):
-            analysis_3D_list_label = []   # need a 3d list, just convert all_period_data
-            for factor in factor_name_lst:
-                temp_factor = []
-                for month in all_period_data:
-                    this_month_stocks_this_factor = list(all_period_data[month][factor])
-                    temp_factor.append(this_month_stocks_this_factor)
-                analysis_3D_list_label.append(temp_factor)
-            analysis_2D_monthly_return = []
+            start = time.time()
+            column_lst = factor_name_lst
+            equity_idx_monthly_equity_returns = {}
+            monthly_equity_returns = {}
+            equity_idx_monthly_factor_score = {}
+            monthly_factor_score = {}
             for month in all_period_data:
-                analysis_2D_monthly_return.append(list(all_period_data[month]['profit_month']))
-            factor_map = {}
-            for time_period_data in all_period_data:
-                for index, row in all_period_data[time_period_data].iterrows():
-                    if index not in factor_map:
-                        factor_map[index] = {time_period_data: row[factor_name_lst].tolist()}
-                    else:    
-                        factor_map[index][time_period_data] = row[factor_name_lst].tolist()
+                monthly_equity_returns[month] = list(all_period_data[month]['profit_month'])
+                for f in factor_name_lst:
+                    if f not in monthly_factor_score:
+                        monthly_factor_score[f] = {month : []}
+                    monthly_factor_score[f][month] = list(all_period_data[month][f])
+                for row in all_period_data[month].itertuples(name='DataFrame'):
+                    stock_name = row.Index
+                    if stock_name not in equity_idx_monthly_equity_returns:
+                        equity_idx_monthly_equity_returns[stock_name] = {}
+                    equity_idx_monthly_equity_returns[stock_name][month] = row.profit_month
 
-            return analysis_3D_list_label, analysis_2D_monthly_return, list(factor_map.keys()), factor_map
+                    if stock_name not in equity_idx_monthly_factor_score:
+                        equity_idx_monthly_factor_score[stock_name] = {month : []}
+                        for factor in factor_name_lst:
+                            equity_idx_monthly_factor_score[stock_name][month].append(row[row._fields.index(factor)])
+                    else:
+                        equity_idx_monthly_factor_score[stock_name][month] = []
+                        for factor in factor_name_lst:
+                            equity_idx_monthly_factor_score[stock_name][month].append(row[row._fields.index(factor)])
+            #end = time.time()
+            #print('time', time.time() - start)
+            return equity_idx_monthly_equity_returns, monthly_equity_returns, monthly_factor_score, equity_idx_monthly_factor_score
 
         def TradeDateDeal():
             his_trade_df = self.stkapi.trade_cal(self.start, self.end)
@@ -282,27 +306,27 @@ class factorModel:
             thread_list = []
             delete_list = []
             self.daily_profit = pd.DataFrame(columns=['trade_data', 'ts_code', 'profit_daily'])
+            start = time.time()
             for item in range(len(self.bt_tradedate)):
                 # process = threading.Thread(target=self.get_val, args=(item, all_period_data, IC_info_lst))
                 get_val(self.bt_tradedate, self.hold_period, self.pre_bt_tradedate, 
                         self.universe, self.universe_index, self.factor_name_lst, 
                         item, all_period_data, self.stkapi, self.factor_api, delete_list)
+            #print('get_val_time', time.time() - start)
+            # for val in all_period_data:
+            #     for row in all_period_data[val].itertuples():
+            #         if math.isnan(row.profit_month):
+            #             print('has non before enter func')
+            #             exit(1)
             # delete_list = [item for sublist in delete_list for item in sublist]
             
-            # for day in all_period_data:
-            #     new_data = all_period_data[day].drop(delete_list, errors='ignore')
-            #     all_period_data[day] = new_data
-            # for day in all_period_data:
-            #     filtered = all_period_data[day][all_period_data[day].index.isin(list(set(all_period_data[0].index)))]
-            #     all_period_data[day] = filtered
-            #print(all_period_data)
-            factor_3D, month_profit, stock_list, factor_MAP = transform_data(all_period_data, self.factor_name_lst)
+            equity_idx_monthly_equity_returns, monthly_equity_returns, monthly_factor_score, equity_idx_monthly_factor_score = transform_data(all_period_data, self.factor_name_lst)
 
-            return factor_3D, factor_MAP, month_profit, self.daily_profit, self.bt_tradedate, stock_list, self.factor_name_lst
+            return equity_idx_monthly_equity_returns, monthly_equity_returns, monthly_factor_score, equity_idx_monthly_factor_score, self.daily_profit
     
         return run()
-        
-    def calcIC(self, dateList:list, scoreList:list[list[float]], returnList:list[list[float]]):
+
+    def calcIC(self, dateList, scoreList, returnList):
 
         '''
             函数: calcIC (non-async)   TODO output method
@@ -321,19 +345,19 @@ class factorModel:
             5) 案例
                 N/A
         '''
-
-        if len(scoreList) != len(returnList) != len(dateList):
-            raise Exception('Error: Lists Have Different Lengths')
         
         ICList = []
 
-        for i in range(len(dateList)):
+        for i in dateList:
             scores = scoreList[i]
             returns = returnList[i]
+            # nanIdx = np.where((np.isnan(returns)))[0]
+            # if nanIdx.size > 0:
+            #     for j in nanIdx:
+            #         scores[j] = 0
+            #         returns[j] = 0
 
-            corr = np.corrcoef(scores, returns)[0,1]
-
-            ICList.append(corr)
+            ICList.append(np.corrcoef(scores, returns)[0,1])
 
         if len(ICList) != len(dateList):
             raise Exception('Error: ICList Length != dateList Length | ERROR!')
@@ -452,10 +476,10 @@ class factorModel:
             if month in scoresMap[equityName]:
                 return (equityName, np.dot(weights, scoresMap[equityName][month]))
             else:
-                print(f'{equityName} NO FACTOR SCORE DATA for [MONTH {month}]')
+                #print(f'{equityName} NO FACTOR SCORE DATA for [MONTH {month}]')
                 return (None, None)
         else:
-            print(f'{equityName} NO FACTOR SCORE DATA [ALL PERIOD]')
+            #print(f'{equityName} NO FACTOR SCORE DATA [ALL PERIOD]')
             return (None, None)
 
     def rankEquity(self, equityNameList, equityScoreList) -> list[list[str]]:
@@ -511,7 +535,7 @@ class factorModel:
                 next_trade_day_data = all_period_data[self.bt_tradedate[index+1]]
 
             #iterate through the groups
-            for group_name_id in range(len(cur_trade_day_data)):
+            for group_name_id in cur_trade_day_data:
                 cur_temp_df = cur_trade_day_data[group_name_id]
                 fee = 0
                 if next_trade_day_data:
@@ -524,7 +548,7 @@ class factorModel:
                     diff_hold = [x for x in next_hold if x not in cur_hold]
                     fee = len(diff_hold) * 2 * 0.0007 / max_holdnum
                 #计算该组每日组合收益率
-                result_s = cur_temp_df.groupby('trade_date')['daily_profit'].mean()
+                result_s = cur_temp_df.groupby('trade_date')['profit_daily'].mean()
                 result_df = result_s.to_frame()
                 result_df.columns = ['dailyRet']
                 result_df["trade_date"] = list(result_df.index)
@@ -546,7 +570,7 @@ class factorModel:
             first_group_df.sort_values(by="trade_date",ascending=True,inplace=True)
             last_group_df.sort_values(by="trade_date", ascending=True, inplace=True)     
             long_short_df = pd.merge(first_group_df,last_group_df,on="trade_date",how="inner")  # trade_date dailyRet final_dailyRet
-            long_short_df["ret"] = long_short_df['dailyRet'] - long_short_df['final_dailyRet']
+            long_short_df["ret"] = long_short_df['dailyRet'] - long_short_df['last_dailyRet']
             long_short_df = long_short_df[['trade_date','ret']]
             long_short_df.columns = ['trade_date','dailyRet']            
             eachgroup_show["longshort_hedge"] = long_short_df
@@ -597,108 +621,119 @@ class factorModel:
         return temp_df,indicator_lst      
 
     def run(self):
-
-
-
         '''
-        Return Type
+        Return Object
 
-        Factor_3D
-        {MonthX : {StockX : [factor1, factor2, factor3, ..., monthly_return]}}
-
-        Factor_MAP
-        {StockX : {MonthX : [factor1Score, factor2Score, ...]}}
-
-        self.daily_profit [不用改]
-
-        self.factor_name_lst    
-        '''
+        1. Equity_Idx_Monthly_Equity_Returns
+            Type: Dict[list]
+            {Stock1 : {Month1 : return, Month2 : return, etc...}}
         
-        #Step 1: Getting Info
-        scores, scoresMap, returns, daily_prof, dates, stockNames, factorNames = self.getData()
+        2. Monthly_Equity_Returns
+            Type: Dict[list]
+            {Month1 : [Stock1Return, Stock2Return, Stock3Return, etc...], Month2 : []...}
 
+        3. Equity_Idx_Monthly_Factor_Score
+            Type: Dict[Dict[list]]
+            {Stock1 : {Month1 : [Stock1Factor1, Stock1Factor2, Stock1Factor3, etc...]}}
+        
+        4. Monthly_Factor_score
+            Type: Dict[Dict[list]]
+            {Factor1 : {Month1 : [Stock1FactorScore, Stock2FactorScore, Stock3FactorScore, etc...], Month2 : []...},}}    
+
+        5. Daily_Equity_Returns
+            Type: pd.DataFrame （这个别改）
+        '''
+
+        Equity_Idx_Monthly_Equity_Returns, Monthly_Equity_Returns, Monthly_Factor_Score, Equity_Idx_Monthly_Factor_Score, Daily_Equity_Returns = self.getData()
+
+        try:    
+            Daily_Equity_Returns = Daily_Equity_Returns.drop(columns=['trade_data'])
+        except:
+            pass
+
+        factor_names = list(Monthly_Factor_Score.keys())
+        month_names = list(Monthly_Equity_Returns.keys())
+        stock_names = list(Equity_Idx_Monthly_Factor_Score.keys())
         minMonths = 2
         maxMonths = 12
-
-        groupedProfit = defaultdict(list)
-        if self.factorWeightMode != 'smart':
-            if self.factorWeightMode == 'equal':
-                factorWeights = self.calcFactorWeights(self.factorWeightMode, factorNames)
-            elif self.factorWeightMode == 'category':
-                factorWeights = self.calcFactorWeights(self.factorWeightMode, factorNames, self.factorCategories)
-                
-        elif self.factorWeightMode == 'smart':
-            ICList = []
-
-            for i in range(len(factorNames)):
-                ICList.append(self.calcIC(dates, scores[i], returns)[1])
-            ICList = pd.DataFrame(ICList).T
-
-            ICList.index = dates
-            ICList.columns = factorNames
-        
-        '''
-        {MONTH: (IC, IC_total), ...}
-        '''
-
+        groupedProfit = defaultdict(dict)
         totalIC = 0
         combinedIC = {}
 
-        for month in range(minMonths, len(dates)):
-            nameList = []
-            scoreList = []
+        #calculating list of IC
+        if self.factorWeightMode != 'smart':
+            if self.factorWeightMode == 'equal':
+                factorWeights = self.calcFactorWeights(self.factorWeightMode, factor_names)
+            elif self.factorWeightMode == 'category':
+                factorWeights = self.calcFactorWeights(self.factorWeightMode, factor_names, self.factorCategories)
+        elif self.factorWeightMode == 'smart':
+            ICList = []
 
-            #calculate weights based on historical info
+            for factor in factor_names:
+                ICList.append(self.calcIC(month_names, Monthly_Factor_Score[factor], Monthly_Equity_Returns)[1])
+            ICList = pd.DataFrame(ICList).T
+
+            ICList.index = month_names
+            ICList.columns = factor_names
+
+        for month in range(minMonths, len(month_names)):
+
+            nameList, scoreList = [], []
+
             if self.factorWeightMode == 'smart':
-                currList = ICList.loc[ICList.index[ICList.index <= dates[month]]]
+                currList = ICList.loc[ICList.index[ICList.index <= month_names[month]]]
                 if currList.shape[0] > maxMonths:
                     currList = currList.iloc[-maxMonths:]
-                factorWeights = self.calcFactorWeights(self.factorWeightMode, factorNames, HistoricalIC=currList, smartmode=self.factorWeightModeParams)
+                factorWeights = self.calcFactorWeights('smart', factor_names, HistoricalIC=currList, smartmode='IRSolverWithDecay')
+            else:
+                if self.factorWeightMode == 'equal':
+                    factorWeights = self.calcFactorWeights(self.factorWeightMode, factor_names)
+                elif self.factorWeightMode == 'category':
+                    factorWeights = self.calcFactorWeights(self.factorWeightMode, factor_names, self.factorCategories)
 
-            #calculate score based on that month's weights
-            for i in range(len(stockNames)):
-                name, score = self.calcEquityScore(stockNames[i], factorWeights, scoresMap, dates[month])
+            #print(f'Weights - {factorWeights}')
+
+            for name in stock_names:
+                name, score = self.calcEquityScore(name, factorWeights, Equity_Idx_Monthly_Factor_Score, month_names[month])
                 if name:
                     nameList.append(name)
                     scoreList.append(score)
             
-            #group based on that month's scores
             equityGroups = self.rankEquity(nameList, scoreList)
 
-            #add into groupedProfit
-            for i in equityGroups:
-                nameFilter = daily_prof[daily_prof['ts_code'].isin(i)]
+            for i in range(len(equityGroups)):
+                nameFilter = Daily_Equity_Returns[Daily_Equity_Returns['ts_code'].isin(equityGroups[i])]
                 try:
-                    dateFilter = nameFilter[(dates[month] <= nameFilter['trade_date']) & (nameFilter['trade_date'] < dates[month+1])]
+                    dateFilter = nameFilter[(month_names[month] <= nameFilter['trade_date']) & (nameFilter['trade_date'] < month_names[month+1])]
                 except:
-                    dateFilter = nameFilter[nameFilter['trade_date'] >= dates[month]]
+                    dateFilter = nameFilter[nameFilter['trade_date'] >= month_names[month]]
                 df = dateFilter.reset_index()
-                df = df.drop(columns=['index', 'trade_data'])
-                groupedProfit[dates[month]].append(df)
-
-            #calculate monthly IC
+                df = df.drop(columns=['index'])
+                groupedProfit[month_names[month]][f'group_{i}'] = (df)
+            
             returnArr = []
-            for i in nameList:
-                returnArr.append(returns[month][stockNames.index(i)])
+            for stock in nameList:
+                returnArr.append(Equity_Idx_Monthly_Equity_Returns[stock][month_names[month]])
 
             currIC = np.corrcoef(returnArr, scoreList)[0,1]
             
             totalIC += currIC
-            combinedIC[month] = (currIC, totalIC)
+            combinedIC[month_names[month]] = (currIC, totalIC)
 
+        res_IC = defaultdict(list)
+        for time in range(len(month_names)):
+            res_IC[time] = [nameList, scoreList]
         '''
         dict - groupedProfit
             key = 挪仓日 (6个key)
             value = list[]
-                lst里面有10个df, 每个df有三个col, 叫ts_code profit date
+                lst里面有10个df, 每个df有三个col, 叫ts_code profit trade_date
+            
+            {month1 : {group1:df, group2:df, group3:df}}
         '''
-    
-        # res_IC = defaultdict(list)
-        # for time in range(len(dates)):
-        #     res_IC[time] = [nameList, scoreList]
 
-        # self.EachGroupPortRet(groupedProfit)
-        
-        return combinedIC, totalIC
+        eachgroup_show = self.EachGroupPortRet(groupedProfit)
+        return eachgroup_show
     
-
+m = factorModel()
+m.run()
