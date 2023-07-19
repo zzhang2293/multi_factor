@@ -684,7 +684,7 @@ class factorModel:
                 currList = ICList.loc[ICList.index[ICList.index <= month_names[month]]]
                 if currList.shape[0] > maxMonths:
                     currList = currList.iloc[-maxMonths:]
-                factorWeights = self.calcFactorWeights('smart', factor_names, HistoricalIC=currList, smartmode='IRSolverWithDecay')
+                factorWeights = self.calcFactorWeights(self.factorWeightMode, factor_names, HistoricalIC=currList, smartmode=self.factorWeightModeParams)
             else:
                 if self.factorWeightMode == 'equal':
                     factorWeights = self.calcFactorWeights(self.factorWeightMode, factor_names)
@@ -734,6 +734,3 @@ class factorModel:
 
         eachgroup_show = self.EachGroupPortRet(groupedProfit)
         return eachgroup_show
-    
-m = factorModel()
-m.run()
