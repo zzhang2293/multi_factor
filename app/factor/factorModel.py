@@ -503,20 +503,40 @@ class factorModel:
                 N/A
         '''
 
-        self.groupnum = 10
+        self.groupnum = 10  # total groups
+        num_stocks_per_group = 1  # put one stock in each group
 
-        #use zip and numpy to make it fast
         zipped = list(zip(equityNameList, equityScoreList))
-        zipped.sort(key = lambda x: x[1], reverse=True)
+        zipped.sort(key=lambda x: x[1], reverse=True)
         zipped = np.array(zipped)
-        zipped[:,1] = zipped[:,1].astype(float)
-        zipped[:,1] = zipped[:,1].argsort()
+        zipped[:, 1] = zipped[:, 1].astype(float)
+        zipped[:, 1] = zipped[:, 1].argsort()
 
-        #split into groups
-        groups = np.array_split(zipped, self.groupnum)
+        groups = []
 
-        #return a list of list of equities
-        return [list(groups[i][:,0]) for i in range(self.groupnum)]
+        for i in range(self.groupnum - 1):  # first 9 groups
+            groups.append(zipped[i*num_stocks_per_group:(i+1)*num_stocks_per_group])
+
+        # rest of the stocks into the 10th group
+        groups.append(zipped[(self.groupnum-1)*num_stocks_per_group:])
+
+        # return a list of list of equities
+        return [list(groups[i][:, 0]) for i in range(self.groupnum)]
+
+        # self.groupnum = 10
+
+        # #use zip and numpy to make it fast
+        # zipped = list(zip(equityNameList, equityScoreList))
+        # zipped.sort(key = lambda x: x[1], reverse=True)
+        # zipped = np.array(zipped)
+        # zipped[:,1] = zipped[:,1].astype(float)
+        # zipped[:,1] = zipped[:,1].argsort()
+
+        # #split into groups
+        # groups = np.array_split(zipped, self.groupnum)
+
+        # #return a list of list of equities
+        # return [list(groups[i][:,0]) for i in range(self.groupnum)]
     
     def calcBasketWeights(self, equityBasket:list) -> list[float]:
             #for now, equal weights
