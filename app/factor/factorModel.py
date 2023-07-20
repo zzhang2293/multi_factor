@@ -504,8 +504,7 @@ class factorModel:
         '''
 
         self.groupnum = 10  # total groups
-        num_stocks_per_group = 1  # put one stock in each group
-
+        
         zipped = list(zip(equityNameList, equityScoreList))
         zipped.sort(key=lambda x: x[1], reverse=True)
         zipped = np.array(zipped)
@@ -514,29 +513,16 @@ class factorModel:
 
         groups = []
 
-        for i in range(self.groupnum - 1):  # first 9 groups
-            groups.append(zipped[i*num_stocks_per_group:(i+1)*num_stocks_per_group])
+        # num_stocks_per_group = 309  # put one stock in each group
+        # for i in range(self.groupnum - 1):  # first 9 groups
+        #     groups.append(zipped[i*num_stocks_per_group:(i+1)*num_stocks_per_group])
+        # groups.append(zipped[(self.groupnum-1)*num_stocks_per_group:])
 
-        # rest of the stocks into the 10th group
-        groups.append(zipped[(self.groupnum-1)*num_stocks_per_group:])
-
-        # return a list of list of equities
-        return [list(groups[i][:, 0]) for i in range(self.groupnum)]
-
-        # self.groupnum = 10
-
-        # #use zip and numpy to make it fast
-        # zipped = list(zip(equityNameList, equityScoreList))
-        # zipped.sort(key = lambda x: x[1], reverse=True)
-        # zipped = np.array(zipped)
-        # zipped[:,1] = zipped[:,1].astype(float)
-        # zipped[:,1] = zipped[:,1].argsort()
-
-        # #split into groups
-        # groups = np.array_split(zipped, self.groupnum)
+        #split into groups
+        groups = np.array_split(zipped, self.groupnum)
 
         # #return a list of list of equities
-        # return [list(groups[i][:,0]) for i in range(self.groupnum)]
+        return [list(groups[i][:,0]) for i in range(self.groupnum)]
     
     def calcBasketWeights(self, equityBasket:list) -> list[float]:
             #for now, equal weights
@@ -582,24 +568,24 @@ class factorModel:
 
 
             # 第一组 - 最后一组   多空对冲             
-            last_group_name = 'group_%s'%(self.groupnum-1)
-            first_group_df = eachgroup_show['group_0']
-            last_group_df_1 = eachgroup_show[last_group_name]
-            last_group_df = last_group_df_1.copy()
-            last_group_df.columns = ['trade_date', 'last_dailyRet']
-            first_group_df.sort_values(by="trade_date",ascending=True,inplace=True)
-            last_group_df.sort_values(by="trade_date", ascending=True, inplace=True)     
-            long_short_df = pd.merge(first_group_df,last_group_df,on="trade_date",how="inner")  # trade_date dailyRet final_dailyRet
-            long_short_df["ret"] = long_short_df['dailyRet'] - long_short_df['last_dailyRet']
-            long_short_df = long_short_df[['trade_date','ret']]
-            long_short_df.columns = ['trade_date','dailyRet']            
-            eachgroup_show["longshort_hedge"] = long_short_df
-            for key in eachgroup_show:
-                df_value = eachgroup_show[key]
-                df_value.drop_duplicates(subset="trade_date",keep="first",inplace=True)
-                eachgroup_show[key] = df_value 
+        last_group_name = 'group_%s'%(self.groupnum-1)
+        first_group_df = eachgroup_show['group_0']
+        last_group_df_1 = eachgroup_show[last_group_name]
+        last_group_df = last_group_df_1.copy()
+        last_group_df.columns = ['trade_date', 'last_dailyRet']
+        first_group_df.sort_values(by="trade_date",ascending=True,inplace=True)
+        last_group_df.sort_values(by="trade_date", ascending=True, inplace=True)     
+        long_short_df = pd.merge(first_group_df,last_group_df,on="trade_date",how="inner")  # trade_date dailyRet final_dailyRet
+        long_short_df["ret"] = long_short_df['dailyRet'] - long_short_df['last_dailyRet']
+        long_short_df = long_short_df[['trade_date','ret']]
+        long_short_df.columns = ['trade_date','dailyRet']            
+        eachgroup_show["longshort_hedge"] = long_short_df
+        for key in eachgroup_show:
+            df_value = eachgroup_show[key]
+            df_value.drop_duplicates(subset="trade_date",keep="first",inplace=True)
+            eachgroup_show[key] = df_value 
              
-            return eachgroup_show              
+        return eachgroup_show              
 
     def HistoryAccuRetAndIndicator(self, group_name:str, eachgroup_dailyret:pd.DataFrame):
         temp_df = eachgroup_dailyret.copy()
@@ -608,7 +594,7 @@ class factorModel:
 
         # 计算每日净值
         temp_df["net_values"] = np.nan  # DataFrame trade_date dailyRet net_values
-        for h in temp_df.index:
+        for h in temp_df.index: 
             if h == 0:
                 temp_df.loc[h, "net_values"] = 1 + temp_df.loc[h, "dailyRet"]
             else:
@@ -616,6 +602,7 @@ class factorModel:
 
         temp_df = temp_df[['trade_date', 'dailyRet', 'net_values']]
         cur_date = temp_df.loc[0,"trade_date"]
+        cur_date = str(cur_date)
         init_date = datetime.datetime(int(cur_date[0:4]),int(cur_date[4:6]),int(cur_date[6:8])) - datetime.timedelta(days=1)
         init_date = init_date.strftime("%Y%m%d")
         init_df = pd.DataFrame([[init_date,0.0,1.0]],index=[0],columns=['trade_date', 'dailyRet', 'net_values'])
@@ -640,7 +627,7 @@ class factorModel:
         temp_df.columns = [group_name]
         return temp_df ,indicator_lst      
 
-    def run(self):
+    def run(self, x = None):
         '''
         Return Object
 
@@ -713,7 +700,7 @@ class factorModel:
                     factorWeights = self.calcFactorWeights(self.factorWeightMode, factor_names, self.factorCategories)
 
             #print(f'Weights - {factorWeights}')
-            print(factorWeights)
+            # print(factorWeights)
             for name in stock_names:
                 name, score = self.calcEquityScore(name, factorWeights, Equity_Idx_Monthly_Factor_Score, month_names[month])
                 if name:
@@ -753,16 +740,17 @@ class factorModel:
             {month1 : {group1:df, group2:df, group3:df}}
         '''
         #df_group_net = {}
+        if x: 
+            print('Using Given Profit')
+            groupedProfit = x
         indicator_lst = []
-        return groupedProfit
         eachgroup_show = self.EachGroupPortRet(groupedProfit)  #净值曲线 output1
+        df_group_net = pd.DataFrame()
         for group in eachgroup_show:
             df_group_indicator, indi_lst = self.HistoryAccuRetAndIndicator(group, eachgroup_show[group])
-            #df_group_net[name] = df_group_indicator[name]
+            df_group_net[group] = df_group_indicator[group]
             indicator_lst.append(indi_lst)
         df_bt_indicator = pd.DataFrame(indicator_lst, index=range(len(indicator_lst)), columns=['group', '年化收益率', '夏普比率', '最大回撤'])
 
-        return eachgroup_show, df_bt_indicator
+        return df_group_net, df_bt_indicator
     
-        
-
