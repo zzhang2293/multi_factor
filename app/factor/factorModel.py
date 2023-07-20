@@ -19,10 +19,9 @@ class factorModel:
     def __init__(self):
         self.groupnum = 10         # 股票分组数
         self.trade_freq = 'm'      # 交易频率 "m" or "w"
-        self.end = '20230716'      # 因子分析结束日期
-        self.start = '20211201' #hardcode this
-        self.factor_name_lst = ['Analyst_factor', 'NegMktValue', 'technology_factor', 'momentumn_factor', 'tps_sps', 
-                                'avgwght_momentum', 'seven_f', 'daizhuerjiu', 'FlowerHidInForest']#, 'aShareholderZ', 'apbSkew', 'stopQ', 'aiDaNp30', 'sumRelatedCorp1Y', 'FlowerHidInForest']
+        self.end = '20230718'      # 因子分析结束日期
+        self.start = '20201225' #hardcode this
+        self.factor_name_lst = ['tps_sps']#, 'aShareholderZ', 'apbSkew', 'stopQ', 'aiDaNp30', 'sumRelatedCorp1Y', 'FlowerHidInForest']
         
         self.universe_index = ['000852.SH', '000905.SH', '000300.SH', '399303.SZ']
         self.universe = []             # 股票池列表
@@ -618,7 +617,7 @@ class factorModel:
         temp_df = temp_df[["trade_date","net_values"]]
         temp_df.set_index("trade_date",drop=True,inplace=True)
         temp_df.columns = [group_name]
-        return temp_df,indicator_lst      
+        return temp_df ,indicator_lst      
 
     def run(self):
         '''
@@ -645,6 +644,7 @@ class factorModel:
         '''
 
         Equity_Idx_Monthly_Equity_Returns, Monthly_Equity_Returns, Monthly_Factor_Score, Equity_Idx_Monthly_Factor_Score, Daily_Equity_Returns = self.getData()
+        
 
         try:    
             Daily_Equity_Returns = Daily_Equity_Returns.drop(columns=['trade_data'])
@@ -692,7 +692,7 @@ class factorModel:
                     factorWeights = self.calcFactorWeights(self.factorWeightMode, factor_names, self.factorCategories)
 
             #print(f'Weights - {factorWeights}')
-
+            print(factorWeights)
             for name in stock_names:
                 name, score = self.calcEquityScore(name, factorWeights, Equity_Idx_Monthly_Factor_Score, month_names[month])
                 if name:
@@ -731,6 +731,16 @@ class factorModel:
             
             {month1 : {group1:df, group2:df, group3:df}}
         '''
+        #df_group_net = {}
+        indicator_lst = []
+        eachgroup_show = self.EachGroupPortRet(groupedProfit)  #净值曲线 output1
+        for group in eachgroup_show:
+            df_group_indicator, indi_lst = self.HistoryAccuRetAndIndicator(group, eachgroup_show[group])
+            #df_group_net[name] = df_group_indicator[name]
+            indicator_lst.append(indi_lst)
+        df_bt_indicator = pd.DataFrame(indicator_lst, index=range(len(indicator_lst)), columns=['group', '年化收益率', '夏普比率', '最大回撤'])
 
-        eachgroup_show = self.EachGroupPortRet(groupedProfit)
-        return eachgroup_show
+        return eachgroup_show, df_bt_indicator
+    
+        
+
