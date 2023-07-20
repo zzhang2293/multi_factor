@@ -18,9 +18,9 @@ class factorModel:
 
     def __init__(self):
         self.groupnum = 10         # 股票分组数
-        self.trade_freq = 'm'      # 交易频率 "m" or "w"
+        self.trade_freq = 'm'      # 交易频率 "m" or "w"b
         self.end = '20230718'      # 因子分析结束日期
-        self.start = '20201225' #hardcode this
+        self.start = '20211225' #hardcode this
         self.factor_name_lst = ['tps_sps']#, 'aShareholderZ', 'apbSkew', 'stopQ', 'aiDaNp30', 'sumRelatedCorp1Y', 'FlowerHidInForest']
         
         self.universe_index = ['000852.SH', '000905.SH', '000300.SH', '399303.SZ']
@@ -311,6 +311,7 @@ class factorModel:
                 get_val(self.bt_tradedate, self.hold_period, self.pre_bt_tradedate, 
                         self.universe, self.universe_index, self.factor_name_lst, 
                         item, all_period_data, self.stkapi, self.factor_api, delete_list)
+                
             #print('get_val_time', time.time() - start)
             # for val in all_period_data:
             #     for row in all_period_data[val].itertuples():
@@ -644,7 +645,7 @@ class factorModel:
         '''
 
         Equity_Idx_Monthly_Equity_Returns, Monthly_Equity_Returns, Monthly_Factor_Score, Equity_Idx_Monthly_Factor_Score, Daily_Equity_Returns = self.getData()
-        
+
 
         try:    
             Daily_Equity_Returns = Daily_Equity_Returns.drop(columns=['trade_data'])
@@ -675,8 +676,8 @@ class factorModel:
 
             ICList.index = month_names
             ICList.columns = factor_names
-
-        for month in range(minMonths, len(month_names)):
+        
+        for month in range((minMonths if self.factorWeightMode == 'smart' else 0), len(month_names)):
 
             nameList, scoreList = [], []
 
@@ -733,6 +734,7 @@ class factorModel:
         '''
         #df_group_net = {}
         indicator_lst = []
+        return groupedProfit
         eachgroup_show = self.EachGroupPortRet(groupedProfit)  #净值曲线 output1
         for group in eachgroup_show:
             df_group_indicator, indi_lst = self.HistoryAccuRetAndIndicator(group, eachgroup_show[group])
