@@ -36,7 +36,7 @@ class factorModel:
 
         self.factorWeightMode = 'equal'
         self.factorCategories = [1, 1, 2]
-        self.factorWeightModeParams = 'IRSolver'
+        self.factorWeightModeParams = 'IRSolverWithDecay'
         self.ICDecayHalfLife = 2
         self.ICEvalPeriod = 10
         self.benchmark = '000905.SH'
