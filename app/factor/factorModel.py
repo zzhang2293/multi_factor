@@ -21,7 +21,7 @@ class factorModel:
         self.trade_freq = 'm'      # 交易频率 "m" or "w"b
         self.end = '20230720'      # 因子分析结束日期
         self.start = '20201201' #hardcode this
-        self.factor_name_lst = ['decay_panic']#, 'aShareholderZ', 'apbSkew', 'stopQ', 'aiDaNp30', 'sumRelatedCorp1Y', 'FlowerHidInForest']
+        self.factor_name_lst = ['decay_panic', 'aShareholderZ', 'apbSkew', 'stopQ', 'aiDaNp30', 'sumRelatedCorp1Y', 'FlowerHidInForest']
         
         self.universe_index = ['000852.SH', '000905.SH', '000300.SH', '399303.SZ']
         self.universe = []             # 股票池列表
@@ -517,28 +517,18 @@ class factorModel:
         '''
 
         self.groupnum = 10  # total groups
-        
-        zipped = list(zip(equityNameList, equityScoreList))
+    
+        equityScoreList = np.array(equityScoreList).astype(float)
         if self.rankLowestFirst == "0":
-            zipped.sort(key=lambda x: x[1], reverse=True)
+            sort_index = np.argsort(equityScoreList)[::-1]
         elif self.rankLowestFirst == "1":
-            zipped.sort(key=lambda x: x[1])
-        zipped = np.array(zipped)
-        zipped[:, 1] = zipped[:, 1].astype(float)
-        zipped[:, 1] = zipped[:, 1].argsort()
-
-        groups = []
-
-        # num_stocks_per_group = 309  # put one stock in each group
-        # for i in range(self.groupnum - 1):  # first 9 groups
-        #     groups.append(zipped[i*num_stocks_per_group:(i+1)*num_stocks_per_group])
-        # groups.append(zipped[(self.groupnum-1)*num_stocks_per_group:])
-
-        #split into groups
-        groups = np.array_split(zipped, self.groupnum)
+            sort_index = np.argsort(equityScoreList)
+            
+        sortedNames = np.array(equityNameList)[sort_index]
+        groups = np.array_split(sortedNames, self.groupnum)
 
         # #return a list of list of equities
-        return [list(groups[i][:,0]) for i in range(self.groupnum)]
+        return [list(group) for group in groups]
     
     def calcBasketWeights(self, equityBasket:list) -> list[float]:
             #for now, equal weights
@@ -551,48 +541,42 @@ class factorModel:
         :return: dict 键为分组名 值为DataFrame "trade_date","dailyRet"
         '''
         #遍历持有期并计算分组表现
-        print(self.bt_tradedate, len(self.bt_tradedate))
+
         eachgroup_show = {}
-        for idx in range(0, len(self.bt_tradedate)):
-            cur_trade_day = self.bt_tradedate[idx]  # 当前调仓日
 
-            if cur_trade_day not in all_period_data:
-                continue
+        start = time.time()
 
-            cur_each_period = all_period_data[cur_trade_day]  # 当前持有期的分组信息,键为分组名，值为DataFrame
-            next_each_period = {}                             # 下一期持有期的分组信息，键为分组名，值为DataFrame
-            if idx != len(self.bt_tradedate) - 1 and self.bt_tradedate[idx + 1] in all_period_data:
-                next_each_period = all_period_data[self.bt_tradedate[idx + 1]]
+        # Create a dictionary to hold DataFrames for each group in all_period_data
+        group_frames = defaultdict(list)
 
-            # 遍历分组
-            for group_name in cur_each_period:
-                cur_temp_df = cur_each_period[group_name]      # 当前组 DataFrame 'trade_date','ts_code','chgPct'
-                # 计算手续费
-                fee = 0
+        for idx, trade_day in enumerate(self.bt_tradedate):
+            cur_each_period = all_period_data[trade_day]  
+
+            if idx + 1 < len(self.bt_tradedate):
+                next_each_period = all_period_data.get(self.bt_tradedate[idx + 1], {})
+            else:
+                next_each_period = {} 
+                
+            if not cur_each_period: continue
+
+            for group_name, cur_temp_df in cur_each_period.items():
+                result_df = cur_temp_df.groupby('trade_date')['profit_daily'].mean().reset_index(name='dailyRet')
+
                 if next_each_period:
-                    next_temp_df = next_each_period[group_name]# 下一期对应得组 DataFrame 'trade_date','ts_code','chgPct'
-                    cur_hold = list(cur_temp_df['ts_code'])    # 当前期x组对应的持仓
-                    next_hold = list(next_temp_df['ts_code'])  # 下一期对应的x组的持仓
-                    cur_stknum = len(cur_hold)
-                    next_stknum = len(next_hold)
-                    max_holdnum = max(cur_stknum,next_stknum)   # 组合持仓股票数量
-                    diff_hold = [x for x in next_hold if x not in cur_hold]
-                    fee = len(diff_hold) * 2 * 0.0007 / max_holdnum # 某组换仓手续费计算
+                    next_temp_df = next_each_period.get(group_name, pd.DataFrame())
+                    cur_hold = set(cur_temp_df['ts_code'])
+                    next_hold = set(next_temp_df['ts_code'])
+                    fee = len(next_hold - cur_hold) * 2 * 0.0007 / max(len(cur_hold), len(next_hold))
 
-                # 计算该组每日组合收益率
-                result_s = cur_temp_df.groupby('trade_date')['profit_daily'].mean()
-                result_df = result_s.to_frame()
-                result_df.columns = ['dailyRet']
-                result_df["trade_date"] = list(result_df.index)
-                result_df.reset_index(drop=True,inplace=True)
-                result_df.loc[len(result_df['trade_date'])-1,"dailyRet"] = result_df.loc[len(result_df['trade_date'])-1,"dailyRet"] - fee # 扣除手续费
-                result_df = result_df[["trade_date","dailyRet"]]
+                    if not result_df.empty:
+                        result_df.iloc[-1, result_df.columns.get_loc('dailyRet')] -= fee
 
-                if group_name not in eachgroup_show:
-                    eachgroup_show[group_name] = result_df
-                else:
-                    eachgroup_show[group_name] = pd.concat([eachgroup_show[group_name],result_df],axis=0)
+                group_frames[group_name].append(result_df)
 
+        eachgroup_show = {group_name: pd.concat(frames, ignore_index=True) for group_name, frames in group_frames.items()}
+
+        print(f'time used is {time.time() - start}')
+        
         # 计算 第一组 - 最后一组(多空对冲)
         final_group_name = "group_%s"%(self.groupnum-1)      # 最后一组的组名
         first_group_df = eachgroup_show["group_0"]           # 第一组的数据
@@ -615,7 +599,9 @@ class factorModel:
             df_value = eachgroup_show[key]       # DataFrame 'trade_date','dailyRet'
             df_value.drop_duplicates(subset="trade_date",keep="first",inplace=True)
             eachgroup_show[key] = df_value
+
         return eachgroup_show
+
 
     # 历史累计收益率序列和策略评价指标
     def HistoryAccuRetAndIndicator(self,group_name,eachgroup_dailyret):
@@ -736,9 +722,13 @@ class factorModel:
         5. Daily_Equity_Returns
             Type: pd.DataFrame （这个别改）
         '''
+        startTime = time.time()
 
         Equity_Idx_Monthly_Equity_Returns, Monthly_Equity_Returns, Monthly_Factor_Score, Equity_Idx_Monthly_Factor_Score, Daily_Equity_Returns, benchmark_dailyret= self.getData()
 
+        currTime = time.time()
+        print(f'Got data in {currTime - startTime} seconds')
+        startTime = currTime
 
         try:    
             Daily_Equity_Returns = Daily_Equity_Returns.drop(columns=['trade_data'])
@@ -754,7 +744,6 @@ class factorModel:
         totalIC = 0
         combinedIC = {'month': [], 'IC': [], 'cumulative': []}
 
-        #calculating list of IC
         if self.factorWeightMode != 'smart':
             if self.factorWeightMode == 'equal':
                 factorWeights = self.calcFactorWeights(self.factorWeightMode, factor_names)
@@ -795,15 +784,16 @@ class factorModel:
             
             equityGroups = self.rankEquity(nameList, scoreList)
 
-            for i in range(len(equityGroups)):
-                nameFilter = Daily_Equity_Returns[Daily_Equity_Returns['ts_code'].isin(equityGroups[i])]
-                try:
-                    dateFilter = nameFilter[(month_names[month] <= nameFilter['trade_date']) & (nameFilter['trade_date'] < month_names[month+1])]
-                except:
-                    dateFilter = nameFilter[nameFilter['trade_date'] >= month_names[month]]
-                df = dateFilter.reset_index()
-                df = df.drop(columns=['index'])
-                groupedProfit[month_names[month]][f'group_{i}'] = (df)
+            try:
+                daily_returns_this_month = Daily_Equity_Returns[(Daily_Equity_Returns['trade_date'] >= month_names[month]) 
+                                    & (Daily_Equity_Returns['trade_date'] < month_names[month+1])]
+            except:
+                daily_returns_this_month = Daily_Equity_Returns[Daily_Equity_Returns['trade_date'] >= month_names[month]]
+            
+            for i, group in enumerate(equityGroups):
+                # Filter df where 'ts_code' is in the current group
+                df_group = daily_returns_this_month[daily_returns_this_month['ts_code'].isin(group)]
+                groupedProfit[month_names[month]][f'group_{i}'] = df_group.reset_index(drop=True)  
             
             returnArr = []
             for stock in nameList:
@@ -815,6 +805,10 @@ class factorModel:
             combinedIC['month'].append(month_names[month])
             combinedIC['IC'].append(currIC)
             combinedIC['cumulative'].append(totalIC)
+
+        currTime = time.time()
+        print(f'Processed in {currTime - startTime} seconds')
+        startTime = currTime
 
         '''
         dict - groupedProfit
@@ -828,8 +822,12 @@ class factorModel:
         indicator_lst = []              # 回测期间分组的回测指标
         df_group_alpha = pd.DataFrame()   # 回测期间分组的alpha曲线 new output
         alpha_indicator_lst = []          # 回测期间分组的alpha回测指标
-
+        
         group_dailyret_dict = self.EachGroupPortRet(groupedProfit)
+
+        currTime = time.time()
+        print(f'EachGroupPortRet in {currTime - startTime} seconds')
+        startTime = currTime
 
         for name in group_dailyret_dict:
             # 策略回测指标
@@ -845,9 +843,8 @@ class factorModel:
         df_bt_indicator = pd.DataFrame(indicator_lst,index = range(len(indicator_lst)),columns=["group","年化收益率","夏普比率","最大回撤"]) # 回测期间分组的回测指标 output
         df_bt_alpha_indicator = pd.DataFrame(alpha_indicator_lst,index=range(len(alpha_indicator_lst)),columns=["group","年化超额收益率","超额最大回撤","calmar"])  # 超额评价指标 new output
 
+        currTime = time.time()
+        print(f'Last Section in {currTime - startTime} seconds')
+        startTime = currTime
+        
         return combinedIC, df_group_net, df_group_alpha, df_bt_indicator, df_bt_alpha_indicator
-        
-        
-        
-        #df_group_net = {}
-    
