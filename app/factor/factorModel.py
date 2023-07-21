@@ -41,7 +41,7 @@ class factorModel:
         self.ICEvalPeriod = 10
         self.benchmark = '000905.SH'
 
-        self.rankLowestFirst = False
+        self.rankLowestFirst = "0"
 
     def getData(self):
 
@@ -519,9 +519,9 @@ class factorModel:
         self.groupnum = 10  # total groups
         
         zipped = list(zip(equityNameList, equityScoreList))
-        if not self.rankLowestFirst:
+        if self.rankLowestFirst == "0":
             zipped.sort(key=lambda x: x[1], reverse=True)
-        else:
+        elif self.rankLowestFirst == "1":
             zipped.sort(key=lambda x: x[1])
         zipped = np.array(zipped)
         zipped[:, 1] = zipped[:, 1].astype(float)
