@@ -18,7 +18,7 @@
 <body>
   <h1>多因子分析</h1>
   <div id="app">
-    <el-form ref="form" :model="form" label-width="120px">
+    <el-form ref="form" :model="form" label-width="140px">
       <el-form-item label="股票分组数">
         <el-input v-model="form.group"></el-input>
       </el-form-item>
@@ -27,6 +27,12 @@
         <el-select v-model="form.freq" placeholder="请选择频率">
           <el-option label="m" value="m"></el-option>
           <el-option label="w" value="w"></el-option>
+        </el-select>
+      </el-form-item>
+      <el-form-item label="因子分数排列方式" >
+        <el-select v-model="form.rankLowestFirst" placeholder="请选择排序方式">
+          <el-option label="升序" value="1"></el-option>
+          <el-option label="降序" value="0"></el-option>
         </el-select>
       </el-form-item>
       <el-form-item label="分析开始日期">
@@ -75,6 +81,8 @@
         </el-table-column>
       </el-table>
     </template>
+    <br>
+    <br>
     <template>
       <el-table v-if="imageVisible" :data="tableData_alpha" style="width: 100%">
         <el-table-column prop="group" label="分组" width="180">
@@ -130,7 +138,8 @@
             endDate: '',
             factor_val: [],
             factor: [],
-            scope: []
+            scope: [],
+            rankLowestFirst: ""
           },
           imageSrc: "",
           image2Src: "",
