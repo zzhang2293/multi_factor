@@ -20,7 +20,7 @@ class factorModel:
         self.groupnum = 10         # 股票分组数
         self.trade_freq = 'm'      # 交易频率 "m" or "w"b
         self.end = '20230720'      # 因子分析结束日期
-        self.start = '20230101' #hardcode this
+        self.start = '20201201' #hardcode this
         self.factor_name_lst = ['decay_panic']#, 'aShareholderZ', 'apbSkew', 'stopQ', 'aiDaNp30', 'sumRelatedCorp1Y', 'FlowerHidInForest']
         
         self.universe_index = ['000852.SH', '000905.SH', '000300.SH', '399303.SZ']
