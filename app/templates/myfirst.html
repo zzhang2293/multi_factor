@@ -55,8 +55,8 @@
         <template>
         <el-button :type="form.buttonType"  @click="onSubmit" >开始分析</el-button>
         </template>
-        <el-button>取消</el-button>
-      </el-form-item>
+        <el-button>取消</el-button>   蓝色:未在运行 橙色:运行中
+      </el-form-item>  
     </el-form>
 
     <!-- <img v-if="imageVisible" v-bind:src=imageSrc alt="Image" width="800px"></img>
@@ -69,9 +69,21 @@
         </el-table-column>
         <el-table-column prop="rate" label="夏普比率" width="180">
         </el-table-column>
-        <el-table-column prop="year_rate" label="年化收益率">
+        <el-table-column prop="year_rate" label="年化收益率 (%)">
         </el-table-column>
-        <el-table-column prop="max" label="最大回撤">
+        <el-table-column prop="max" label="最大回撤 (%)">
+        </el-table-column>
+      </el-table>
+    </template>
+    <template>
+      <el-table v-if="imageVisible" :data="tableData_alpha" style="width: 100%">
+        <el-table-column prop="group" label="分组" width="180">
+        </el-table-column>
+        <el-table-column prop="rate" label="年化超额收益率 (%)" width="180">
+        </el-table-column>
+        <el-table-column prop="max_drawdown" label="超额最大回撤 (%)">
+        </el-table-column>
+        <el-table-column prop="calmar" label="calmar">
         </el-table-column>
       </el-table>
     </template>
@@ -81,6 +93,7 @@
   <br>
   <div v-if="imageVisible" id="container"></div>
   <br>
+  <div v-if="imageVisible" id="container_alpha"></div>
   <br>
   <div v-if="imageVisible" id="column"></div>
   <br>
@@ -123,6 +136,7 @@
           image2Src: "",
           imageVisible: false,
           tableData: [],
+          tableData_alpha: [],
           chart: ""
         }
       },
@@ -137,13 +151,16 @@
             data: json_form
           }).then(function (resp) {
             _this.imageVisible = true
-            data_show = []
+            tabledata_show = []
+            alpha_tabledata_show = []
+            
             indicator = Object.values(resp.data.indicator)
+            indicator_alpha = Object.values(resp.data.indicator_alpha)
             groups_trans = Object.values(resp.data.group)
-            console.log(groups_trans)
+            groups_alpha = Object.values(resp.data.group_alpha)
             indicator.forEach((val, index) => {
               
-              data_show.push({
+              tabledata_show.push({
                 group: val.group,
                 year_rate: val.year_rate,
                 rate: val.rate,
@@ -151,18 +168,114 @@
 
               })
             })
-            _this.tableData = data_show
+            indicator_alpha.forEach((val, index) => {
+              
+              alpha_tabledata_show.push({
+                group: val.group,
+                rate: val.year_rate,
+                max_drawdown: val.max_drawdown,
+                calmar: val.calmar
+
+              })
+            })
+            _this.tableData = tabledata_show
+            _this.tableData_alpha = alpha_tabledata_show
             /////////////////////////////////////////////////////////////////////////////////////////
             const data_series = [];
+            const alpha_data_series = [];
             const dateList = Object.values(groups_trans[groups_trans.length-1])
             const formattedDates = dateList.map(dateStr=>{
-              const year = parseInt(dateStr.substring(0, 4));
-              const month = parseInt(dateStr.substring(4, 6))-1;
-              const day = parseInt(dateStr.substring(6, 8));
+            const year = parseInt(dateStr.substring(0, 4));
+            const month = parseInt(dateStr.substring(4, 6))-1;
+            const day = parseInt(dateStr.substring(6, 8));
 
 
               return Date.UTC(year, month, day);
             });
+            for (let i = 0; i < groups_alpha.length - 1; i ++){
+              each_group = []
+              const vals = Object.values(groups_alpha[i]);
+              vals.forEach(function(element, index){
+                let correspondingDate = formattedDates[index];
+                let oneday_onegroup = {
+                  x: correspondingDate,
+                  y: element
+                }
+                each_group.push(oneday_onegroup)
+              });
+              const Ser = {
+                name: 'group_' + i,
+                data: each_group
+              }
+              alpha_data_series.push(Ser)
+            }
+            let last_group_alpha = []
+            let last_alpha = []
+            const vals_alpha = Object.values(groups_alpha[groups_trans.length-2]); 
+            vals_alpha.forEach(function(element, index){
+              let correspondingDate = formattedDates[index];
+              let oneday_onegroup = {
+                x: correspondingDate,
+                y: element
+              }
+              last_alpha.push(oneday_onegroup);
+            })            
+            const last_Ser_alpha = {
+              name: "longshort_hedge",
+              data: last_alpha
+            }
+            alpha_data_series.push(last_Ser_alpha);
+
+            Highcharts.chart('container_alpha', {
+              chart:{
+                zoomType: 'x'
+              },
+              title:{
+                text: "因子alpha",
+                align: "left"
+              },
+              yAxis:{
+                title:{
+                  text: "净值"
+                }
+              },
+              xAxis: {
+                type:'datetime',
+                labels:{
+                  format: '{value:%Y-%m-%d}'
+                }
+              },
+              legend:{
+                layout: 'vertical',
+                align: 'right',
+                verticalAligh: 'middle'
+              },
+              plotOptions:{
+                series:{
+                  label:{
+                    connectorAllowed: false
+                  }
+                }
+              },
+
+              series: alpha_data_series,
+              responsive:{
+                rules:[{
+                  condition:{
+                    maxWidth: 500
+                  },
+                  chartOption:{
+                    legend:{
+                      layout: 'horizontal',
+                      align: 'center',
+                      verticalAligh: 'bottom'
+                    }
+                  }
+                }]
+              }
+            });
+            
+            ////////////////////////////////////
             for( let i = 0; i < groups_trans.length - 2; i ++){
               each_group = [];
               const vals = Object.values(groups_trans[i]);
@@ -174,7 +287,6 @@
                 }
                 each_group.push(oneday_onegroup);
               })
-              console.log(each_group);
               const Ser = {
                 name: "group_" + i,
                 data: each_group
@@ -183,7 +295,7 @@
               
             }
             let last = []
-            const vals = Object.values(groups_trans[groups_trans.length-2]);
+            const vals = Object.values(groups_trans[groups_trans.length-2]); // the last element is date list so -2
             vals.forEach(function(element, index){
               let correspondingDate = formattedDates[index];
               let oneday_onegroup = {
@@ -246,7 +358,7 @@
               }
             });
             //////////////////////////////////////////////////////////////////////////////////
-            let year = Object.values(resp.data.IC_val.year)
+            let year = Object.values(resp.data.IC_val.month)
             let IC = Object.values(resp.data.IC_val.IC)
             let IC_cumulative = Object.values(resp.data.IC_val.cumulative)
             const formattedDates2 = year.map(dateStr=>{

@@ -6,9 +6,7 @@ import numpy as np
 import pandas as pd
 from api.SelectData import SelectFromMongo
 from api.SelectFactorData import GetFactorFromMongoDB
-import threading
-import bisect
-import multiprocessing as mp
+
 
 stk_api = SelectFromMongo()
 factor_api = GetFactorFromMongoDB()
@@ -19,9 +17,10 @@ class AnalysisMethod():
     def __init__(self):
         self.groupnum = 10             # 股票分组数
         self.trade_freq = "m"          # 交易频率 "m" or "w"
-        self.end = "20230718"          # 因子分析结束日期
-        self.start = "20211215"        # 因子分析开始日期
-        self.factor_name_lst = ["tps_sps"]      # 需要分析的因子列表，因子必须要为因子数据库中的因子，若列表包含多因子，则只分析等权因子组合
+        self.end = "20230719"          # 因子分析结束日期
+        self.start = "20230101"        # 因子分析开始日期
+        #self.factor_name_lst = ['Analyst_factor', 'NegMktValue', 'technology_factor', 'tps_sps', 'momentumn_factor','avgwght_momentum','seven_f']      # 需要分析的因子列表，因子必须要为因子数据库中的因子，若列表包含多因子，则只分析等权因子组合
+        self.factor_name_lst = ['tps_sps']
         self.universe_index = ['000852.SH', '000905.SH', '000300.SH', '399303.SZ'] # 股票池范围，若为空表示全市场
         self.universe = []             # 股票池列表
         self.hold_period = {}          # 历史持有期，字典中的键为调仓日、值为持有期交易日列表（按升序排序的区间交易日）
@@ -29,11 +28,8 @@ class AnalysisMethod():
         self.pre_bt_tradedate = []     # 调仓日的前一个交易日
         self.Facor_IsAscending = False # 因子值默认为降序
         self.allfactorname_lst = factor_api.GetAllFactorName()  # 数据库因子名称列表
-        self.df_IC = ""
-        self.IC_mean = ""
-        self.df_group_net = ""
-        self.df_bt_indicator = ""
-        self.lock = threading.Lock()
+        self.benchmark = "000905.SH"
+
     # 获取某日停牌复牌股票信息
     def GetSuspendInfo(self,trade_date, db_api, c=1):
         result_s = []  # 停牌股票列表
@@ -74,7 +70,6 @@ class AnalysisMethod():
     # 调仓日和区间持有期
     def TradeDateDeal(self):
         his_trade_df = stk_api.trade_cal(self.start,self.end)
-        #print(his_trade_df)
         his_trade_df = his_trade_df[his_trade_df['is_open']==1]
         historyTradeDate = list(his_trade_df['cal_date'])            # 当前交易日列表
         pre_historyTradeDate = list(his_trade_df['pretrade_date'])   # 当前交易日的前一个交易日列表
@@ -101,7 +96,6 @@ class AnalysisMethod():
         self.bt_tradedate = bt_TradeDate            # 升序排序的日期
         self.pre_bt_tradedate = pre_bt_TradeDate
 
-        #time1 = time.time()
         # 生成持有期列表
         for item in range(0,len(bt_TradeDate)):
             s_period = bt_TradeDate[item]
@@ -114,8 +108,7 @@ class AnalysisMethod():
             e_idx = historyTradeDate.index(e_period)
             if len(historyTradeDate[s_idx:e_idx+1])>=4:
                 self.hold_period[s_period] = historyTradeDate[s_idx:e_idx+1]
-        #time2 = time.time()
-        #print("code block", time2 - time1)
+
     # 需要提取数据的股票范围
     def SetUniverse(self, data_date):
         if not self.universe_index:
@@ -138,7 +131,7 @@ class AnalysisMethod():
             self.universe = temp_uni_0
 
     # 因子去极值
-    def WinSorizeNewMethod(self,df, winsorize_max_num=5):
+    def WinSorizeNewMethod(self, df, winsorize_max_num=5):
         '''
         :param df: DataFrame 行索引为股票代码 列为因子值列，因子值列支持多列（多个因子）
         :param n_draw: int 正态分布去极值的迭代次数，默认为5次
@@ -152,19 +145,26 @@ class AnalysisMethod():
             temp_df = df_factor[[clt]]  # DataFrame 行索引为股票代码 列为需要去极值的因子值
             count_num = 0  # 初始化单个因子去极值的次数
 
+            mylist = list(temp_df[clt])
+
             while True:
-                m = temp_df[clt].mean()
-                s = temp_df[clt].std()
+                m = np.mean(mylist)
+                s = np.std(mylist)
                 up = m + 3 * s
                 down = m - 3 * s
 
-                temp_df[temp_df[clt] > up] = up
-                temp_df[temp_df[clt] < down] = down
+                for idx in range(0,len(mylist)):
+                    if mylist[idx] > up:
+                        mylist[idx] = up
+                    elif mylist[idx] < down:
+                        mylist[idx] = down
+                    else:
+                        continue
 
                 count_num += 1
                 if count_num >= winsorize_max_num:
                     break
-
+            temp_df[clt] = mylist
             df_factor_after[clt] = temp_df[clt]
         return df_factor_after
 
@@ -235,10 +235,10 @@ class AnalysisMethod():
         ret_group_dict = {}
 
         for key in factor_group_dict:
-            stk_lst = list(factor_group_dict[key].index)  # 当前分组对应的股票代码
-            his_data = stk_api.MktEqudAdjGet(stk_lst, [], s_date, e_date,['trade_date','ts_code','close','pre_close'])
+            stk_lst = list(factor_group_dict[key].index)    # 当前分组对应的股票代码
+            his_data = stk_api.MktEqudAdjGet(stk_lst, [], s_date, e_date,['trade_date', 'ts_code', 'pct_chg'],is_adj=False)
             his_data.dropna(inplace=True)
-            his_data['chgPct'] = his_data['close'] / his_data['pre_close'] - 1
+            his_data['chgPct'] = his_data['pct_chg'] / 100
             his_data = his_data[['trade_date','ts_code','chgPct']]
             ret_group_dict[key] = his_data
         return ret_group_dict
@@ -252,7 +252,8 @@ class AnalysisMethod():
         stk_holdret_dict = {}     # dict 健为分层名，值为DataFrame(行索引为股票代码，列为股票区间累计收益率)
         for name in stkdailyret_group_dict:
             temp_df = stkdailyret_group_dict[name]  # DataFrame 'trade_date','ts_code','chgPct'
-            result_s = temp_df.groupby('ts_code')['chgPct'].sum()
+            temp_df['chgPct_plus_one'] = temp_df['chgPct'] + 1
+            result_s = temp_df.groupby('ts_code')['chgPct_plus_one'].prod() - 1
             result_df = result_s.to_frame()
             result_df.columns = ['accuChgPct']
             stk_holdret_dict[name] = result_df
@@ -277,8 +278,10 @@ class AnalysisMethod():
 
         df_factor.columns = ['factor']
         df_holdret.columns = ['accuret']
+
         df_temp['factor'] = df_factor['factor']
         df_temp['accuret'] = df_holdret['accuret']
+        df_temp.dropna(inplace=True)
         IC_value = df_temp['factor'].corr(df_temp['accuret'])
         return IC_value
 
@@ -290,26 +293,19 @@ class AnalysisMethod():
         '''
         #遍历持有期并计算分组表现
         eachgroup_show = {}
-        # lock_list = []
-
         for idx in range(0, len(self.bt_tradedate)):
-            # thread = threading.Thread(target=self.cal_profit, args=(idx, all_period_data, eachgroup_show))
-            # lock_list.append(thread)
-            # thread.start()
             cur_trade_day = self.bt_tradedate[idx]  # 当前调仓日
 
             if cur_trade_day not in all_period_data:
                 continue
 
             cur_each_period = all_period_data[cur_trade_day]  # 当前持有期的分组信息,键为分组名，值为DataFrame
-            #print(cur_each_period)
             next_each_period = {}                             # 下一期持有期的分组信息，键为分组名，值为DataFrame
             if idx != len(self.bt_tradedate) - 1 and self.bt_tradedate[idx + 1] in all_period_data:
                 next_each_period = all_period_data[self.bt_tradedate[idx + 1]]
 
             # 遍历分组
             for group_name in cur_each_period:
-                
                 cur_temp_df = cur_each_period[group_name]      # 当前组 DataFrame 'trade_date','ts_code','chgPct'
                 # 计算手续费
                 fee = 0
@@ -334,18 +330,9 @@ class AnalysisMethod():
 
                 if group_name not in eachgroup_show:
                     eachgroup_show[group_name] = result_df
-                    # print(eachgroup_show)
                 else:
                     eachgroup_show[group_name] = pd.concat([eachgroup_show[group_name],result_df],axis=0)
-        # for t in lock_list:
-        #     t.join()
-        #with open("multi_thread.txt", "w") as f:
-        # with open("single_thread.txt", 'w') as f:
-        #     print(eachgroup_show, file=f)
-        # print("START????????????????????????????????????")
-        # for item in eachgroup_show:
-        #     for val in eachgroup_show[item].iterrows():        #         print(val)
-        # print("end????????????????")
+
         # 计算 第一组 - 最后一组(多空对冲)
         final_group_name = "group_%s"%(self.groupnum-1)      # 最后一组的组名
         first_group_df = eachgroup_show["group_0"]           # 第一组的数据
@@ -368,7 +355,6 @@ class AnalysisMethod():
             df_value = eachgroup_show[key]       # DataFrame 'trade_date','dailyRet'
             df_value.drop_duplicates(subset="trade_date",keep="first",inplace=True)
             eachgroup_show[key] = df_value
-        
         return eachgroup_show
 
     # 历史累计收益率序列和策略评价指标
@@ -416,6 +402,61 @@ class AnalysisMethod():
         temp_df.columns = [group_name]
         return temp_df,indicator_lst
 
+    # 拿回去期间基准指数的日涨跌幅数据
+    def BenchmarkDailyPct(self):
+        # 指数历史涨跌幅
+        index_df = stk_api.MktIndexGet([self.benchmark], [], beginDate=self.start, endDate=self.end,field=["trade_date", "pct_chg"])
+        if not index_df.empty:
+            index_df['pct_chg'] = index_df['pct_chg'] / 100
+            index_df = index_df[["trade_date", "pct_chg"]]
+            index_df.sort_values(by="trade_date",ascending=True,inplace=True)
+        return index_df
+
+    # 策略相对基准指数的表现和评价指标分析
+    def HistiryAlphaAndIndicator(self,group_name,eachgroup_dailyret,benchmark_df):
+        '''
+        :param group_name 分组名称
+        :param eachgroup_dailyret: DataFrame trade_date dailyRet
+        :param benchmark_df DataFrame "trade_date", "pct_chg"
+        :return: temp_df DataFrame 行索引为交易日（升序），唯一列为累计净值 ； indicator_lst [] 依次为年化alpha、超额夏普比率、超额最大回撤
+        '''
+        if benchmark_df.empty:
+            return pd.DataFrame(),[]
+
+        merge_df = pd.merge(eachgroup_dailyret,benchmark_df,on="trade_date",how="inner")  # trade_date dailyRet pct_chg
+        merge_df.dropna(inplace=True)
+        merge_df["dailyAlpha"] = merge_df['dailyRet'] - merge_df['pct_chg']
+        merge_df = merge_df[['trade_date','dailyAlpha']]
+        merge_df.sort_values(by="trade_date",ascending=True,inplace=True)
+        merge_df.set_index("trade_date",drop=True,inplace=True)
+        merge_df = merge_df.cumsum(axis=0)
+        merge_df.columns = ['accuAlpha']
+
+        # 年化alpha
+        year_alpha = list(merge_df["accuAlpha"])[-1] / len(list(merge_df["accuAlpha"])) * 242
+
+        # alpha 最大回撤
+        df_temp_1 = merge_df.copy()
+        df_temp_1.index = range(len(df_temp_1["accuAlpha"]))
+        df_temp_1["max_drawn"] = np.nan
+        for n in df_temp_1.index:
+            df_temp_1.loc[n, "max_drawn"] = (df_temp_1.loc[n, "accuAlpha"] - df_temp_1.loc[0:n + 1, "accuAlpha"].max())
+        max_drawn = df_temp_1["max_drawn"].min()
+
+        # 计算alpha的收益回撤比
+        calmar_ratio = round(year_alpha, 4) / abs(round(max_drawn, 4))
+
+        # 返回值
+        cur_date = list(merge_df.index)[0]
+        init_date = datetime.datetime(int(cur_date[0:4]), int(cur_date[4:6]), int(cur_date[6:8])) - datetime.timedelta(days=1)
+        init_date = init_date.strftime("%Y%m%d")
+        init_df = pd.DataFrame([0], index=[init_date], columns=['accuAlpha'])
+        result_df = pd.concat([init_df,merge_df],axis=0)
+        result_df.columns = [group_name]
+        indicator_lst = [group_name,year_alpha,max_drawn,calmar_ratio]
+        return result_df,indicator_lst
+
+
     # 每个持有期每组的日收益率序列
     def MainFunc(self):
         t0 = time.time()
@@ -424,142 +465,75 @@ class AnalysisMethod():
         # 遍历持有期，对因子分组并从数据库提取日收益率
         all_period_data = {}  # 所有持有期因子分层数据的日收益率序列 dict 键为调仓日 值为dict(键为分组名、值为每组股票对应的日收益率)
         IC_info_lst = []
-        time1 = time.time()
-        thread_list = []
         for item in range(0,len(self.bt_tradedate)):
-            # process = threading.Thread(target=self.get_val, args=(item, all_period_data, IC_info_lst))
-            # thread_list.append(process)
-            # process.start()
             if self.bt_tradedate[item] not in self.hold_period:
                 continue  # 将持有期太少的期数过滤掉
             else:
                 pre_day = self.pre_bt_tradedate[item]     # 前一个交易日
                 cur_day = self.bt_tradedate[item]         # 当前交易日(调仓日)
                 hold_datelst = self.hold_period[cur_day]  # 当期持有期交易日列表
-                
-  
+
             self.SetUniverse(pre_day)                       # 股票池设置
             df_f = self.GetFactorFromDB(pre_day)            # 提取调仓日前一个交易的因子值
+            # df_f.to_csv("./%s_df_f.csv"%pre_day)
             factor_group_dict = self.FactorDivGroup(df_f)   # 当期因子分组 dict 键为分组名，如group_1；值为因子DataFrame 行索引为股票代码，列为因子值
-            # line_420_time = time.time()
             stkdailyret_group_dict = self.GetHoldPeriodPriceRet(hold_datelst,factor_group_dict)  # dict 键为分组名 值为DataFrame 持有期分组的每只股票的每日收益率
-            return stkdailyret_group_dict
-            # line_422_time = time.time()
-            # print("line 421 time = ", line_422_time - line_420_time)
             all_period_data[cur_day] = stkdailyret_group_dict
             stk_holdret_dict = self.StockHoldRet(stkdailyret_group_dict) # 持有期每只股票的区间累计涨跌幅
             this_period_IC = self.ComputeIC(factor_group_dict,stk_holdret_dict)
             IC_info_lst.append([cur_day,this_period_IC])
-        # for t in thread_list:
-        #     t.join()
-        # with open("IC_info_list_single.txt", 'w') as f:
-        #     print(IC_info_lst, file=f)
-        time2 = time.time()
-        # IC_info_lst.sort()
-        print("code block", time2 - time1)
+
         # 历史持有期IC值
-        self.df_IC = pd.DataFrame(IC_info_lst,index=range(len(IC_info_lst)),columns=["tradeDate","IC"])
-        self.df_IC["IC_累计值"] = self.df_IC['IC'].cumsum()
-        self.df_IC.set_index("tradeDate",drop=True,inplace=True)  # 每期对应的IC值 output
-        self.IC_mean = self.df_IC['IC'].mean()              # IC均值 output
-        # print(IC_mean)
-        # df_IC.to_csv("./df_IC.csv")
+        df_IC = pd.DataFrame(IC_info_lst,index=range(len(IC_info_lst)),columns=["tradeDate","IC"])
+        df_IC["IC_累计值"] = df_IC['IC'].cumsum()
+        df_IC.set_index("tradeDate",drop=True,inplace=True)  # 每期对应的IC值 output
+        IC_mean = df_IC['IC'].mean()              # IC均值 output
+        print(IC_mean)
+        df_IC.to_csv("./df_IC.csv")
 
         # 遍历持有期,计算分组的每日收益率序列
-        #print(all_period_data)\
-        start_time = time.time()
+        group_dailyret_dict = self.EachGroupPortRet(all_period_data)  # 键为分组名 值为DataFrame "trade_date","dailyRet"
+        
+        '''
+        ##################################### 保存数据 ##########################################
+        for idx_0 in all_period_data:
+            for idx_1 in all_period_data[idx_0]:
+                all_period_data[idx_0][idx_1].to_csv("./temp_file/all_period_data_%s_%s.csv"%(idx_0,idx_1))
 
-        group_dailyret_dict = self.EachGroupPortRet(all_period_data)  # 键为分组名 值为DataFrame "trade_date","dailyRet" TODO
-        with open("dailyret_multi.txt", 'w') as f:
-        # with open("dailyret_multi.txt", 'w') as f:
-            for item in group_dailyret_dict:
-                print(group_dailyret_dict[item], file=f)
-        print("group_dailyret diff:", time.time()- start_time)
+        for temp_idx in group_dailyret_dict:
+            group_dailyret_dict[temp_idx].to_csv("./temp_file/group_dailyret_dict_%s.csv"%temp_idx)
+        ########################################################################################
+        '''
+        
         # 遍历分组，回测结果保存并展示
-        self.df_group_net = pd.DataFrame()   # 回测期间分组净值曲线 output
+        df_group_net = pd.DataFrame()   # 回测期间分组净值曲线 output
         indicator_lst = []              # 回测期间分组的回测指标
-        for name in group_dailyret_dict:
-            df_group_indicator,indi_lst = self.HistoryAccuRetAndIndicator(name,group_dailyret_dict[name])  
-            self.df_group_net[name] = df_group_indicator[name]
-            indicator_lst.append(indi_lst)
-        self.df_bt_indicator = pd.DataFrame(indicator_lst,index = range(len(indicator_lst)),columns=["group","年化收益率","夏普比率","最大回撤"]) # 回测期间分组的回测指标 output
-        # with open("df_bt_indicator_multi.txt", 'w') as f:
-        with open("df_bt_indicator_single.txt", 'w') as f:
+        benchmark_dailyret = self.BenchmarkDailyPct()   # 基准指数的日收益率序列
+        df_group_alpha = pd.DataFrame()   # 回测期间分组的alpha曲线 new output
+        alpha_indicator_lst = []          # 回测期间分组的alpha回测指标
 
-            print(self.df_bt_indicator, file=f)
+        for name in group_dailyret_dict:
+            # 策略回测指标
+            df_group_indicator,indi_lst = self.HistoryAccuRetAndIndicator(name,group_dailyret_dict[name])
+            df_group_net[name] = df_group_indicator[name]
+            indicator_lst.append(indi_lst)
+            # 策略alpha
+            group_alpha,alpha_indi_lst = self.HistiryAlphaAndIndicator(name,group_dailyret_dict[name],benchmark_dailyret)
+            df_group_alpha[name] = group_alpha[name]
+            alpha_indicator_lst.append(alpha_indi_lst)
             
+
+        df_bt_indicator = pd.DataFrame(indicator_lst,index = range(len(indicator_lst)),columns=["group","年化收益率","夏普比率","最大回撤"]) # 回测期间分组的回测指标 output
+        df_bt_alpha_indicator = pd.DataFrame(alpha_indicator_lst,index=range(len(alpha_indicator_lst)),columns=["group","年化超额收益率","超额最大回撤","calmar"])  # 超额评价指标 new output
+        df_group_net.to_csv('./df_group_net.csv')
+        df_bt_indicator.to_csv("./df_bt_indicator.csv")
+        df_bt_alpha_indicator.to_csv("./df_bt_alpha_indicator.csv")
+        df_group_alpha.to_csv("./df_group_alpha.csv")
         t1 = time.time()
         print("耗时：",t1-t0)
         print("finish")
 
 
-    def get_val(self, item:int, all_period_data:dict, IC_info_lst:list):
-        if self.bt_tradedate[item] not in self.hold_period:
-            return 0
-        
-        else:
-            pre_day = self.pre_bt_tradedate[item]
-            cur_day = self.bt_tradedate[item]
-            hold_datelst = self.hold_period[cur_day]
-        self.SetUniverse(pre_day)
-        df_f = self.GetFactorFromDB(pre_day)
-        factor_group_dict = self.FactorDivGroup(df_f)
-        stkdailyret_group_dict = self.GetHoldPeriodPriceRet(hold_datelst, factor_group_dict)
-        all_period_data[cur_day] = stkdailyret_group_dict
-        stk_holdret_dict = self.StockHoldRet(stkdailyret_group_dict)
-        this_period_IC = self.ComputeIC(factor_group_dict, stk_holdret_dict)
-        bisect.insort(IC_info_lst, [cur_day, this_period_IC], key=lambda x: x[0])
-        
-        return 1
-
-    def cal_profit(self, idx:int, all_period_data:dict, eachgroup_show:dict):
-        cur_trade_day = self.bt_tradedate[idx]
-        if cur_trade_day not in all_period_data:
-            return 0
-        cur_each_period = all_period_data[cur_trade_day]
-        # print(cur_each_period)
-        next_each_period = {}
-        if idx != len(self.bt_tradedate) - 1 and self.bt_tradedate[idx + 1] in all_period_data:
-            next_each_period = all_period_data[self.bt_tradedate[idx + 1]]
-        for group_name in cur_each_period:
-            cur_temp_df = cur_each_period[group_name]
-            fee = 0
-            if next_each_period:
-                next_temp_df = next_each_period[group_name]
-                cur_hold = list(cur_temp_df['ts_code'])    # 当前期x组对应的持仓
-                next_hold = list(next_temp_df['ts_code'])  # 下一期对应的x组的持仓
-                cur_stknum = len(cur_hold)
-                next_stknum = len(next_hold)
-                max_holdnum = max(cur_stknum,next_stknum)   # 组合持仓股票数量
-                diff_hold = [x for x in next_hold if x not in cur_hold]
-                fee = len(diff_hold) * 2 * 0.0007 / max_holdnum # 某组换仓手续费计算             
-                            # 计算该组每日组合收益率
-            result_s = cur_temp_df.groupby('trade_date')['chgPct'].mean()
-            result_df = result_s.to_frame()
-            result_df.columns = ['dailyRet']
-            result_df["trade_date"] = list(result_df.index)
-            result_df.reset_index(drop=True,inplace=True)
-            result_df.loc[len(result_df['trade_date'])-1,"dailyRet"] = result_df.loc[len(result_df['trade_date'])-1,"dailyRet"] - fee # 扣除手续费
-            result_df = result_df[["trade_date","dailyRet"]]
-            # print(result_df)
-            # print(group_name)
-            # print("")
-            if group_name not in eachgroup_show:
-                # print("not in show")
-                
-                eachgroup_show[group_name] = result_df
-                # print(type(result_df["trade_date"][0]))
-            #print(group_name)
-            else:
-                # print("in show")
-                self.lock.acquire()
-                eachgroup_show[group_name] = pd.concat([eachgroup_show[group_name], result_df], axis=0).sort_values(by=["trade_date"])
-                print(eachgroup_show[group_name])
-                self.lock.release()
-        print("finish: ", cur_trade_day)
-        return 0
-
 if __name__ == '__main__':
     analysis_obj = AnalysisMethod()
-
     analysis_obj.MainFunc()
