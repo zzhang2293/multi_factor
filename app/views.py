@@ -50,12 +50,15 @@ def collect_data(requests):
             for val in factor:
                 factor_list.append(factor_dict[val]["label"])
             analysisMethod.factor_name_lst = factor_list
+        if len(data['rankLowestFirst']) > 0:
+            analysisMethod.rankLowestFirst = data['rankLowestFirst']
         print(analysisMethod.factor_name_lst)
         print(analysisMethod.start)
         print(analysisMethod.end)
         print(analysisMethod.trade_freq)
         print(analysisMethod.groupnum)
         print(analysisMethod.universe_index)
+        print(analysisMethod.rankLowestFirst)
         combinedIC, df_group_net,df_group_alpha, df_bt_indicator, df_bt_alpha_indicator = analysisMethod.run()
         group_data = df_group_net.to_dict()
         group_data_alpha = df_group_alpha.to_dict()
