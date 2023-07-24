@@ -36,9 +36,9 @@ class factorModel:
 
         self.factorWeightMode = 'equal'
         self.factorCategories = [1, 1, 2]
-        self.factorWeightModeParams = 'IRSolverWithDecay'
+        self.factorWeightModeParams = 'IRSolver'
         self.ICDecayHalfLife = 2
-        self.ICEvalPeriod = 10
+        self.ICEvalPeriod = 30
         self.benchmark = '000905.SH'
 
         self.rankLowestFirst = "0"
@@ -463,7 +463,7 @@ class factorModel:
                 weight = np.array(weight.reshape(len(weight),))[0]
                 weight = weight.tolist()
 
-            return np.tanh(minmax_scale(weight, feature_range=(-1, 1))) if normalize else weight
+            return weight#np.tanh(minmax_scale(weight, feature_range=(-1, 1))) if normalize else weight
             
     def calcEquityScore(self, equityName:str, weights:list, scoresMap:dict, month:int):
 
@@ -722,6 +722,8 @@ class factorModel:
         5. Daily_Equity_Returns
             Type: pd.DataFrame （这个别改）
         '''
+        print(self.factorWeightMode, self.factorWeightModeParams)
+        
         startTime = time.time()
 
         Equity_Idx_Monthly_Equity_Returns, Monthly_Equity_Returns, Monthly_Factor_Score, Equity_Idx_Monthly_Factor_Score, Daily_Equity_Returns, benchmark_dailyret= self.getData()
