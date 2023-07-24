@@ -34,7 +34,7 @@ class factorModel:
         self.lock = threading.Lock()
         self.stkapi = SelectFromMongo()
 
-        self.factorWeightMode = 'equal'
+        self.factorWeightMode = 'smart'
         self.factorCategories = [1, 1, 2]
         self.factorWeightModeParams = 'Correlation'
         self.ICDecayHalfLife = 30
@@ -364,11 +364,6 @@ class factorModel:
         for i in dateList:
             scores = scoreList[i]
             returns = returnList[i]
-            # nanIdx = np.where((np.isnan(returns)))[0]
-            # if nanIdx.size > 0:
-            #     for j in nanIdx:
-            #         scores[j] = 0
-            #         returns[j] = 0
 
             ICList.append(np.corrcoef(scores, returns)[0,1])
 
@@ -471,26 +466,6 @@ class factorModel:
                 weight = mat*np.mat(IC.mean()).reshape(len(mat),1)
                 weight = np.array(weight.reshape(len(weight),))[0]
                 weight = weight.tolist()
-
-            elif smartmode == 'CorrelationDecay':
-
-                actualPeriod = min(self.EvalPeriod, IC.shape[0])
-
-                weights = [2**((i-actualPeriod-1)/(self.ICDecayHalfLife))/np.sum([2**((-j)/self.ICDecayHalfLife) for j in range(1, actualPeriod+1)]) for i in range(1, actualPeriod+1)]
-                
-                newIC = IC.copy()
-                for i in newIC:
-                    newIC.loc[:,i] = newIC.loc[:,i] * weights
-                covar = np.cov(newIC, rowvar=False)
-
-                corr = np.corrcoef(equityScore, rowvar=False)
-                D = np.diag(np.sqrt(np.diag(covar)))
-                covar = D @ nlg.inv(corr) @ D
-                mat = nlg.inv(covar)                 
-                weight = mat*np.mat(IC.mean()).reshape(len(mat),1)
-                weight = np.array(weight.reshape(len(weight),))[0]
-                weight = weight.tolist()
-            
                 
             return weight
             
@@ -800,7 +775,7 @@ class factorModel:
                 if currList.shape[0] > maxMonths:
                     currList = currList.iloc[-maxMonths:]
                     
-                if self.factorWeightModeParams in ['Correlation', 'CorrelationDecay']:
+                if self.factorWeightModeParams == 'Correlation':
 
                     #get current monthly score
                     res = defaultdict(list)
@@ -813,8 +788,10 @@ class factorModel:
                     for factor in Monthly_Factor_Score:
                         for date in Monthly_Factor_Score[factor]:
                             #print(date, int(date) >= int(startMonth), int(date) <= int(endMonth))
-                            if int(date) >= int(startMonth) and int(date) <= int(endMonth):
+                            if int(date) >= int(startMonth) and int(date) < int(endMonth):
                                 res[factor] += Monthly_Factor_Score[factor][date]
+                            if int(date) >= int(endMonth):
+                                break
 
                     res = pd.DataFrame(res)
                     factorWeights = self.calcFactorWeights(self.factorWeightMode, factor_names, HistoricalIC =currList, smartmode=self.factorWeightModeParams, equityScore=res)
