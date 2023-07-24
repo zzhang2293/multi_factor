@@ -34,7 +34,7 @@ class factorModel:
         self.lock = threading.Lock()
         self.stkapi = SelectFromMongo()
 
-        self.factorWeightMode = 'smart'
+        self.factorWeightMode = 'equal'
         self.factorCategories = [1, 1, 2]
         self.factorWeightModeParams = 'Correlation'
         self.ICDecayHalfLife = 30
