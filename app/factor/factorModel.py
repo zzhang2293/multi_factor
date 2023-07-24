@@ -34,11 +34,11 @@ class factorModel:
         self.lock = threading.Lock()
         self.stkapi = SelectFromMongo()
 
-        self.factorWeightMode = 'equal'
+        self.factorWeightMode = 'smart'
         self.factorCategories = [1, 1, 2]
-        self.factorWeightModeParams = 'IRSolver'
+        self.factorWeightModeParams = 'Correlation'
         self.ICDecayHalfLife = 2
-        self.ICEvalPeriod = 30
+        self.EvalPeriod = 30
         self.benchmark = '000905.SH'
 
         self.rankLowestFirst = "0"
@@ -377,7 +377,7 @@ class factorModel:
 
         return dateList, ICList
     
-    def calcFactorWeights(self, mode:str, listOfFactors:list[str], listOfCategories:list[str] = [], HistoricalIC:list[list[float]] = [], smartmode = 'IRSolver', normalize = False) -> list:
+    def calcFactorWeights(self, mode:str, listOfFactors:list[str], listOfCategories:list[str] = [], HistoricalIC:list[list[float]] = [], smartmode = 'IRSolver', normalize = False, equityScore = None) -> list:
 
         '''
             函数: calcFactorWeights (non-async)
@@ -432,15 +432,13 @@ class factorModel:
         elif mode == 'smart':
             if HistoricalIC.shape[1] != len(listOfFactors):
                 raise Exception('Error IC Size')
-            
-            if smartmode not in ['IRSolver', 'IRSolverWithDecay']:
-                raise Exception('Error Smart Mode')
 
-            IC = HistoricalIC.tail(min(self.ICEvalPeriod, HistoricalIC.shape[0]))
+
+            IC = HistoricalIC.tail(min(self.EvalPeriod, HistoricalIC.shape[0]))
             
 
             if smartmode == 'IRSolver':
-                mat = nlg.inv(np.mat(IC.cov()))                     
+                mat = nlg.inv(np.cov(IC, rowvar=False))                 
                 weight = mat*np.mat(IC.mean()).reshape(len(mat),1)
                 weight = np.array(weight.reshape(len(weight),))[0]
                 weight = weight.tolist()
@@ -449,21 +447,32 @@ class factorModel:
 
                 #additional - decay IC values
 
-                self.ICEvalPeriod = min(self.ICEvalPeriod, IC.shape[0])
+                actualPeriod = min(self.EvalPeriod, IC.shape[0])
 
-                weights = [2**((i-self.ICEvalPeriod-1)/(self.ICDecayHalfLife))/np.sum([2**((-j)/self.ICDecayHalfLife) for j in range(1, self.ICEvalPeriod+1)]) for i in range(1, self.ICEvalPeriod+1)]
+                weights = [2**((i-actualPeriod-1)/(self.ICDecayHalfLife))/np.sum([2**((-j)/self.ICDecayHalfLife) for j in range(1, actualPeriod+1)]) for i in range(1, actualPeriod+1)]
                 
                 newIC = IC.copy()
                 
                 for i in newIC:
                     newIC.loc[:,i] = newIC.loc[:,i] * weights
 
-                mat = nlg.inv(np.mat(newIC.cov()))                     
+                mat = nlg.inv(np.cov(newIC, rowvar=False))                           
                 weight = mat*np.mat(newIC.mean()).reshape(len(mat),1)
                 weight = np.array(weight.reshape(len(weight),))[0]
                 weight = weight.tolist()
 
-            return weight#np.tanh(minmax_scale(weight, feature_range=(-1, 1))) if normalize else weight
+            elif smartmode == 'Correlation':
+                
+                covar = np.cov(IC, rowvar=False)
+                corr = np.corrcoef(equityScore, rowvar=False)
+                D = np.diag(np.sqrt(np.diag(covar)))
+                covar = D @ nlg.inv(corr) @ D
+                mat = nlg.inv(covar)                 
+                weight = mat*np.mat(IC.mean()).reshape(len(mat),1)
+                weight = np.array(weight.reshape(len(weight),))[0]
+                weight = weight.tolist()
+                
+            return weight
             
     def calcEquityScore(self, equityName:str, weights:list, scoresMap:dict, month:int):
 
@@ -602,7 +611,6 @@ class factorModel:
 
         return eachgroup_show
 
-
     # 历史累计收益率序列和策略评价指标
     def HistoryAccuRetAndIndicator(self,group_name,eachgroup_dailyret):
         '''
@@ -739,6 +747,7 @@ class factorModel:
 
         factor_names = list(Monthly_Factor_Score.keys())
         month_names = list(Monthly_Equity_Returns.keys())
+        self.month_names = month_names
         stock_names = list(Equity_Idx_Monthly_Factor_Score.keys())
         minMonths = 2
         maxMonths = 12
@@ -766,10 +775,32 @@ class factorModel:
             nameList, scoreList = [], []
 
             if self.factorWeightMode == 'smart':
+                #get current IC
                 currList = ICList.loc[ICList.index[ICList.index <= month_names[month]]]
                 if currList.shape[0] > maxMonths:
                     currList = currList.iloc[-maxMonths:]
-                factorWeights = self.calcFactorWeights(self.factorWeightMode, factor_names, HistoricalIC=currList, smartmode=self.factorWeightModeParams)
+                    
+                if self.factorWeightModeParams == 'Correlation':
+
+                    #get current monthly score
+                    res = defaultdict(list)
+                    endMonth = month_names[month]
+                    if month > maxMonths:
+                        startMonth = month_names[month - maxMonths]
+                    else:
+                        startMonth = month_names[0]
+
+                    for factor in Monthly_Factor_Score:
+                        for date in Monthly_Factor_Score[factor]:
+                            #print(date, int(date) >= int(startMonth), int(date) <= int(endMonth))
+                            if int(date) >= int(startMonth) and int(date) <= int(endMonth):
+                                res[factor] += Monthly_Factor_Score[factor][date]
+
+                    res = pd.DataFrame(res)
+                    factorWeights = self.calcFactorWeights(self.factorWeightMode, factor_names, HistoricalIC =currList, smartmode=self.factorWeightModeParams, equityScore=res)
+                else:
+                    
+                    factorWeights = self.calcFactorWeights(self.factorWeightMode, factor_names, HistoricalIC=currList, smartmode=self.factorWeightModeParams)
             else:
                 if self.factorWeightMode == 'equal':
                     factorWeights = self.calcFactorWeights(self.factorWeightMode, factor_names)
