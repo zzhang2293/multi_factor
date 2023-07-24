@@ -785,16 +785,17 @@ class factorModel:
                     else:
                         startMonth = month_names[0]
 
-                    for factor in Monthly_Factor_Score:
+                    for factor in Monthly_Factor_Score: # {factor1 : {month1 : [], month2 : []}}
                         for date in Monthly_Factor_Score[factor]:
                             #print(date, int(date) >= int(startMonth), int(date) <= int(endMonth))
-                            if int(date) >= int(startMonth) and int(date) < int(endMonth):
+                            if int(date) >= int(startMonth) and int(date) <= int(endMonth):
                                 res[factor] += Monthly_Factor_Score[factor][date]
                             if int(date) >= int(endMonth):
                                 break
 
                     res = pd.DataFrame(res)
                     factorWeights = self.calcFactorWeights(self.factorWeightMode, factor_names, HistoricalIC =currList, smartmode=self.factorWeightModeParams, equityScore=res)
+                    print(f'{month_names[month]} - {factorWeights}')
                 else:
                     
                     factorWeights = self.calcFactorWeights(self.factorWeightMode, factor_names, HistoricalIC=currList, smartmode=self.factorWeightModeParams)
