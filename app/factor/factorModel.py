@@ -37,8 +37,8 @@ class factorModel:
         self.factorWeightMode = 'smart'
         self.factorCategories = [1, 1, 2]
         self.factorWeightModeParams = 'Correlation'
-        self.ICDecayHalfLife = 30
-        self.EvalPeriod = 30
+        self.EvalPeriod = 31
+        self.minEvalPeriod = 2
         self.benchmark = '000905.SH'
 
         self.rankLowestFirst = "0"
@@ -375,28 +375,31 @@ class factorModel:
     def calcFactorWeights(self, mode:str, listOfFactors:list[str], listOfCategories:list[str] = [], HistoricalIC:list[list[float]] = [], smartmode = 'IRSolver', equityScore = None) -> list:
 
         '''
-            函数: calcFactorWeights (non-async)
+            函数: calcFactorWeights (synchronous)
             -------
-            1) 摘要：此函数用于计算多因子策略中的权重
-            2) 函数输入
-                - mode [REQUIRED]
-                    计算方式，可以是全部等权重(equal)，也可以是按照大类等权重(category), 也可以是基于历史IC的权重(smart)
-                - listOfFactors [REQUIRED]
-                    - list of factor names (list[str])
-                - listOfCategories [OPTIONAL, REQUIRED IF mode == 'category']
-                    - list of factor categories (list[int]), 如[1, 1, 2, 3, 1, 4] 则代表有1, 2, 5是第一大类, 3是第二大类, 等等
-                - listOfHistoricalIC [OPTIONAL, REQUIRED IF mode == 'smart']
-                    - pd.DataFrame, 每个指标要有一个对应的历史IC值
-                - smartmode [OPTIONAL, REQUIRED IF mode == 'smart']
-                    - 如何使用历史IC智能计算, 可以优化最大化IR(IRsolver), 计算因子半衰后的最大化IR(IRSolverWithDecay)
+            1) 摘要：此函数用于计算单期各因子的权重
+            2) 函数输入：
+                1) mode [REQUIRED] (str)
+                    - 计算方式, 有三种: equal(等权重), category(类别等权重), smart(优化权重)
+                2) listOfFactors [REQUIRED] (list[str])
+                    - 因子名称序列
+                3) listOfCategories [OPTIONAL, REQUIRED if mode = 'category'] (list[str]) 
+                    - 分类序列, 用于category模式
+                4) HistoricalIC [OPTIONAL, REQUIRED if mode = 'smart'] (pd.DataFrame)
+                    - 历史各因子各月IC分数, 用于smart模式
+                    - 数据结构：
+                        - index: 日期 (日期越早越前)
+                        - columns: 因子名称 (与listOfFactors顺序一致)
+                5) smartmode [OPTIONAL, REQUIRED if mode = 'smart'] (str)
+                    - 优化模式, 现在就一种: Correlation, 用于smart模式
+                6) equityScore [OPTIONAL, REQUIRED if mode = 'smart'] (pd.DataFrame)
+                    - 历史各股票各日因子分数, 用于smart模式
+                    - 数据结构：
+                        - index: 无
+                        - columns: 因子名称
+                            *注: 每行均为该行因子对各股票各日的因子分数, 做了np.vstack处理
             3) 输出: list[float], 每个因子的权重
-            4) 可控变量:
-                - ICPeriod: int, 选择用于计算历史IC的时间长度
-                - half_life: int, 历史IC数据半衰周期
-            5) 案例
-                - 等权重模式 calcWeights('equal', ['a', 'b', 'c', 'd', 'e', 'f'])
-                - 大类等权重模式 calcWeights('category', ['a', 'b', 'c', 'd', 'e', 'f'], listOfCategories = [1, 1, 2, 3, 1, 4])
-                - 历史IC智能计算模式 calcWeights('smart', ['a', 'b', 'c', 'd', 'e', 'f'], HistoricalIC = {pd.DataFrame Object}, smartmode='IRSolver')
+            4) 可控变量: 无
         '''
 
         if mode not in ['equal', 'category', 'smart']:
@@ -428,42 +431,14 @@ class factorModel:
             if HistoricalIC.shape[1] != len(listOfFactors):
                 raise Exception('Error IC Size')
 
-
-            IC = HistoricalIC.tail(min(self.EvalPeriod, HistoricalIC.shape[0]))
-            
-
-            if smartmode == 'IRSolver':
-                mat = nlg.inv(np.cov(IC, rowvar=False))                 
-                weight = mat*np.mat(IC.mean()).reshape(len(mat),1)
-                weight = np.array(weight.reshape(len(weight),))[0]
-                weight = weight.tolist()
-            
-            elif smartmode == 'IRSolverWithDecay':
-
-                #additional - decay IC values
-
-                actualPeriod = min(self.EvalPeriod, IC.shape[0])
-
-                weights = [2**((i-actualPeriod-1)/(self.ICDecayHalfLife))/np.sum([2**((-j)/self.ICDecayHalfLife) for j in range(1, actualPeriod+1)]) for i in range(1, actualPeriod+1)]
+            if smartmode == 'Correlation': #best
                 
-                newIC = IC.copy()
-                
-                for i in newIC:
-                    newIC.loc[:,i] = newIC.loc[:,i] * weights
-
-                mat = nlg.inv(np.cov(newIC, rowvar=False))                           
-                weight = mat*np.mat(newIC.mean()).reshape(len(mat),1)
-                weight = np.array(weight.reshape(len(weight),))[0]
-                weight = weight.tolist()
-
-            elif smartmode == 'Correlation': #best
-                
-                covar = np.cov(IC, rowvar=False)
+                covar = np.cov(HistoricalIC, rowvar=False)
                 corr = np.corrcoef(equityScore, rowvar=False)
                 D = np.diag(np.sqrt(np.diag(covar)))
                 covar = D @ nlg.inv(corr) @ D
                 mat = nlg.inv(covar)                 
-                weight = mat*np.mat(IC.mean()).reshape(len(mat),1)
+                weight = mat*np.mat(HistoricalIC.mean()).reshape(len(mat),1)
                 weight = np.array(weight.reshape(len(weight),))[0]
                 weight = weight.tolist()
                 
@@ -744,8 +719,7 @@ class factorModel:
         month_names = list(Monthly_Equity_Returns.keys())
         self.month_names = month_names
         stock_names = list(Equity_Idx_Monthly_Factor_Score.keys())
-        minMonths = 2
-        maxMonths = 12
+        #minMonths = 2
         groupedProfit = defaultdict(dict)
         totalIC = 0
         combinedIC = {'month': [], 'IC': [], 'cumulative': []}
@@ -765,23 +739,24 @@ class factorModel:
             ICList.index = month_names
             ICList.columns = factor_names
         
-        for month in range((minMonths if self.factorWeightMode == 'smart' else 0), len(month_names)):
+        for month in range((self.minEvalPeriod if self.factorWeightMode == 'smart' else 0), len(month_names)):
 
             nameList, scoreList = [], []
 
             if self.factorWeightMode == 'smart':
                 #get current IC
-                currList = ICList.loc[ICList.index[ICList.index <= month_names[month]]]
-                if currList.shape[0] > maxMonths:
-                    currList = currList.iloc[-maxMonths:]
+                currList = ICList.loc[ICList.index[ICList.index < month_names[month]]]
+
+                if currList.shape[0] > self.EvalPeriod:
+                    currList = currList.iloc[-self.EvalPeriod:]
                     
                 if self.factorWeightModeParams == 'Correlation':
 
                     #get current monthly score
                     res = defaultdict(list)
                     endMonth = month_names[month]
-                    if month > maxMonths:
-                        startMonth = month_names[month - maxMonths]
+                    if month > self.EvalPeriod:
+                        startMonth = month_names[month - self.EvalPeriod]
                     else:
                         startMonth = month_names[0]
 
