@@ -20,8 +20,9 @@ class factorModel:
         self.groupnum = 10         # 股票分组数
         self.trade_freq = 'm'      # 交易频率 "m" or "w"b
         self.end = '20230720'      # 因子分析结束日期
-        self.start = '20201201' #hardcode this
-        self.factor_name_lst = ['decay_panic', 'aShareholderZ', 'apbSkew', 'stopQ', 'aiDaNp30', 'sumRelatedCorp1Y', 'FlowerHidInForest']
+        self.start = '20210420' #hardcode this
+        self.factor_name_lst = ['lpnpQ','revQYOY','hkHoldRatioB','conDaPS20','hkHoldVolChgB20','fundT10NegValuePct',
+                               'upp01M20D','ddp01M20D','voll01M20D','aiDaNp60','conDaPS20','udslDWL','udsl','udslUCL']
         
         self.universe_index = ['000852.SH', '000905.SH', '000300.SH', '399303.SZ']
         self.universe = []             # 股票池列表
@@ -34,11 +35,11 @@ class factorModel:
         self.lock = threading.Lock()
         self.stkapi = SelectFromMongo()
 
-        self.factorWeightMode = 'smart'
+        self.factorWeightMode = 'equal'
         self.factorCategories = [1, 1, 2]
         self.factorWeightModeParams = 'Correlation'
         self.EvalPeriod = 31
-        self.minEvalPeriod = 2
+        self.minEvalPeriod = 4
         self.benchmark = '000905.SH'
 
         self.rankLowestFirst = "0"
@@ -53,7 +54,6 @@ class factorModel:
             hold_period: 持有期字典   key 为交易日列表值（首月第一个交易日）value 为 list，值为此月交易日、
             pre_bt_tradedate: 调仓日前一天列表 list
             universe: 股票池
-        
         '''
         def get_val(bt_tradedate:list, hold_period:dict, pre_bt_tradedate:list, 
                 universe:list, universe_index:list, factor_name_lst:list, item:int, all_period_data:dict
@@ -700,7 +700,6 @@ class factorModel:
         5. Daily_Equity_Returns
             Type: pd.DataFrame （这个别改）
         '''
-        print(self.factorWeightMode, self.factorWeightModeParams)
         
         startTime = time.time()
 
@@ -716,6 +715,7 @@ class factorModel:
             pass
 
         factor_names = list(Monthly_Factor_Score.keys())
+        print(len(factor_names), factor_names)
         month_names = list(Monthly_Equity_Returns.keys())
         self.month_names = month_names
         stock_names = list(Equity_Idx_Monthly_Factor_Score.keys())
@@ -769,10 +769,11 @@ class factorModel:
                                 break
 
                     res = pd.DataFrame(res)
+                    
                     factorWeights = self.calcFactorWeights(self.factorWeightMode, factor_names, HistoricalIC =currList, smartmode=self.factorWeightModeParams, equityScore=res)
                     print(f'{month_names[month]} - {factorWeights}')
+                    print(f'CurrList Shape is {currList.shape}')
                 else:
-                    
                     factorWeights = self.calcFactorWeights(self.factorWeightMode, factor_names, HistoricalIC=currList, smartmode=self.factorWeightModeParams)
             else:
                 if self.factorWeightMode == 'equal':
@@ -780,7 +781,6 @@ class factorModel:
                 elif self.factorWeightMode == 'category':
                     factorWeights = self.calcFactorWeights(self.factorWeightMode, factor_names, self.factorCategories)
 
-            #print(f'Weights - {factorWeights}')
             # print(factorWeights)
             for name in stock_names:
                 name, score = self.calcEquityScore(name, factorWeights, Equity_Idx_Monthly_Factor_Score, month_names[month])
