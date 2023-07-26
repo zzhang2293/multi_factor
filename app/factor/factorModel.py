@@ -335,6 +335,9 @@ class factorModel:
             
             equity_idx_monthly_equity_returns, monthly_equity_returns, monthly_factor_score, equity_idx_monthly_factor_score = transform_data(all_period_data, self.factor_name_lst)
 
+            factor_names = list(monthly_factor_score.keys())
+            print(len(factor_names), factor_names)
+
             return equity_idx_monthly_equity_returns, monthly_equity_returns, monthly_factor_score, equity_idx_monthly_factor_score, self.daily_profit, BenchmarkDailyPct()
     
         return run()
