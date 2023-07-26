@@ -321,6 +321,7 @@ class factorModel:
             start = time.time()
             for item in range(len(self.bt_tradedate)):
                 # process = threading.Thread(target=self.get_val, args=(item, all_period_data, IC_info_lst))
+                
                 get_val(self.bt_tradedate, self.hold_period, self.pre_bt_tradedate, 
                         self.universe, self.universe_index, self.factor_name_lst, 
                         item, all_period_data, self.stkapi, self.factor_api, delete_list)
@@ -332,6 +333,8 @@ class factorModel:
             #             print('has non before enter func')
             #             exit(1)
             # delete_list = [item for sublist in delete_list for item in sublist]
+
+            print
             
             equity_idx_monthly_equity_returns, monthly_equity_returns, monthly_factor_score, equity_idx_monthly_factor_score = transform_data(all_period_data, self.factor_name_lst)
 
