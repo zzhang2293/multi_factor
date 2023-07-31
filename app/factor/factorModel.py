@@ -665,8 +665,8 @@ class factorModel:
        # 拿回去期间基准指数的日涨跌幅数据
     
 
-    def calulate(self, Equity_Idx_Monthly_Equity_Returns, Monthly_Equity_Returns, 
-            Monthly_Factor_Score, Equity_Idx_Monthly_Factor_Score, 
+    def calculate(self, Equity_Idx_Monthly_Equity_Returns, Monthly_Equity_Returns, 
+            Monthly_Factor_Score, Equity_Idx_Monthly_Factor_Score:dict, 
             Daily_Equity_Returns, benchmark_dailyret):
         '''
         Return Object
@@ -702,6 +702,8 @@ class factorModel:
             Daily_Equity_Returns = Daily_Equity_Returns.drop(columns=['trade_data'])
         except:
             pass
+
+
 
         factor_names = list(Monthly_Factor_Score.keys())
         month_names = list(Monthly_Equity_Returns.keys())
@@ -838,4 +840,4 @@ class factorModel:
     
     def run(self):
         Equity_Idx_Monthly_Equity_Returns, Monthly_Equity_Returns, Monthly_Factor_Score, Equity_Idx_Monthly_Factor_Score, Daily_Equity_Returns, benchmark_dailyret = self.getData()
-        return self.calulate(Equity_Idx_Monthly_Equity_Returns, Monthly_Equity_Returns, Monthly_Factor_Score, Equity_Idx_Monthly_Factor_Score, Daily_Equity_Returns, benchmark_dailyret)
+        return self.calculate(Equity_Idx_Monthly_Equity_Returns, Monthly_Equity_Returns, Monthly_Factor_Score, Equity_Idx_Monthly_Factor_Score, Daily_Equity_Returns, benchmark_dailyret)

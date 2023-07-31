@@ -10,16 +10,58 @@ import pandas as pd
     param: min: 最小组合数量  max: 最大组合数量
 
 '''
+
+
+'''
+        Return Object
+
+        1. Equity_Idx_Monthly_Equity_Returns
+            Type: Dict[list]
+            {Stock1 : {Month1 : return, Month2 : return, etc...}}
+        
+        2. Monthly_Equity_Returns
+            Type: Dict[list]
+            {Month1 : [Stock1Return, Stock2Return, Stock3Return, etc...], Month2 : []...}
+
+        3. Equity_Idx_Monthly_Factor_Score
+            Type: Dict[Dict[list]]
+            {Stock1 : {Month1 : [Stock1Factor1, Stock1Factor2, Stock1Factor3, etc...]}}
+        
+        4. Monthly_Factor_score
+            Type: Dict[Dict[list]]
+            {Factor1 : {Month1 : [Stock1FactorScore, Stock2FactorScore, Stock3FactorScore, etc...], Month2 : []...},}}    
+
+        5. Daily_Equity_Returns
+            Type: pd.DataFrame （这个别改）
+'''
+'''
+            def calculate(self, Equity_Idx_Monthly_Equity_Returns, Monthly_Equity_Returns, 
+            Monthly_Factor_Score, Equity_Idx_Monthly_Factor_Score:dict, 
+            Daily_Equity_Returns, benchmark_dailyret):
+
+'''
+
+        
 def get_factor_combination_lst(min:int, max:int, path:str):
     df = pd.read_csv(path)
     longshort_hedge_res_dict = {'因子组合': [], '年化收益率': [], '夏普比率': [] ,'最大回撤': []}
     group0_dict = {'因子组合': [], '年化超额收益率': [], '超额最大回撤': [], 'calmar': []}
     factor_lst = list(df.iloc[:,0])
-    
+    model.factor_name_lst = factor_lst
+    Equity_Idx_Monthly_Equity_Returns, Monthly_Equity_Returns, Monthly_Factor_Score, Equity_Idx_Monthly_Factor_Score, Daily_Equity_Returns, benchmark_dailyret = model.getData()
+    nums_iter = 0
     for num_factor in range(min, max+1):
         for comb in itertools.combinations(factor_lst, num_factor):
-            model.factor_name_lst = list(comb)
-            _, _, _, df_bt_indicator, df_bt_alpha_indicator = model.run()
+            target_equity_idx_monthly_factor_score = Equity_Idx_Monthly_Factor_Score.copy()
+            for stk in target_equity_idx_monthly_factor_score:
+                for month in target_equity_idx_monthly_factor_score[stk]:
+                    target_equity_idx_monthly_factor_score[stk][month] = [target_equity_idx_monthly_factor_score[stk][month][x] for x in [i for i, value in enumerate(list(comb)) if value in factor_lst]]
+            target_monthly_factor_score = Monthly_Factor_Score.copy()
+            target_monthly_factor_score = {key : target_monthly_factor_score[key] for key in list(comb)}
+
+
+            _, _, _, df_bt_indicator, df_bt_alpha_indicator = model.calculate(Equity_Idx_Monthly_Equity_Returns, Monthly_Equity_Returns, target_monthly_factor_score,
+                                                                               target_equity_idx_monthly_factor_score, Daily_Equity_Returns, benchmark_dailyret)
             long_short = df_bt_indicator.loc[df_bt_indicator['group'] == 'longshort_hedge']
             long_short = long_short.values.flatten().tolist()
             longshort_hedge_res_dict['因子组合'].append(str(list(comb)))
@@ -33,6 +75,8 @@ def get_factor_combination_lst(min:int, max:int, path:str):
             group0_dict['年化超额收益率'].append(group0[1])
             group0_dict['超额最大回撤'].append(group0[2])
             group0_dict['calmar'].append(group0[3])
+            nums_iter += 1
+            print("get combination time:", nums_iter)
     long_short_df = pd.DataFrame(longshort_hedge_res_dict)
     long_short_df.sort_values(by='年化收益率', ascending=False)
     group0_df = pd.DataFrame(group0_dict)
