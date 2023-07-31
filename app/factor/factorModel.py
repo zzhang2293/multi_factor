@@ -22,7 +22,7 @@ class factorModel:
         self.end = '20230720'      # 因子分析结束日期
         self.start = '20210420' #hardcode this
         self.factor_name_lst = ['lpnpQ','revQYOY','hkHoldRatioB','conDaPS20','hkHoldVolChgB20','fundT10NegValuePct',
-                               'upp01M20D','ddp01M20D','voll01M20D','aiDaNp60','conDaPS20','udslDWL','udsl','udslUCL']
+                               'upp01M20D','ddp01M20D','voll01M20D','aiDaNp60','udslDWL','udsl','udslUCL']
         
         self.universe_index = ['000852.SH', '000905.SH', '000300.SH', '399303.SZ']
         self.universe = []             # 股票池列表
@@ -41,7 +41,6 @@ class factorModel:
         self.EvalPeriod = 31
         self.minEvalPeriod = 4
         self.benchmark = '000905.SH'
-
         self.rankLowestFirst = "0"
 
     def getData(self):
@@ -66,20 +65,14 @@ class factorModel:
             universe = SetUniverse(pre_day)
             start = time.time()
             df_f2= GetFactorFromDB(universe, factor_name_lst, pre_day, stk_api, factor_api) # df_f2: dataframe, index is ts_code, column is factors, period is monthly
-            #print('getDataFrom db', time.time() - start)
             start = time.time()
             stock_daily_profit = GetHoldPeriodPriceRet(hold_datelst, df_f2, stk_api)
-            #print('GetHoldPeriodPricedRet', time.time() - start)
 
             self.daily_profit = pd.concat([self.daily_profit, stock_daily_profit], axis=0, ignore_index=True)
-            # for val in self.daily_profit['profit_daily']:
-            #     if math.isnan(val):
-            #         print('has nan in daily')
-            #         exit(1)
+
             stk_holdret_monthly = StockHoldRet(stock_daily_profit) # monthly profit, use for analysis
 
             df_f2 = pd.merge(df_f2, stk_holdret_monthly, left_index=True, right_index=True)
-            #print(len(df_f2))
         
             
             for val in df_f2['profit_month']:
@@ -243,7 +236,6 @@ class factorModel:
                         for factor in factor_name_lst:
                             equity_idx_monthly_factor_score[stock_name][month].append(row[row._fields.index(factor)])
             #end = time.time()
-            #print('time', time.time() - start)
             return equity_idx_monthly_equity_returns, monthly_equity_returns, monthly_factor_score, equity_idx_monthly_factor_score
 
         def TradeDateDeal():
@@ -326,20 +318,11 @@ class factorModel:
                         self.universe, self.universe_index, self.factor_name_lst, 
                         item, all_period_data, self.stkapi, self.factor_api, delete_list)
                 
-            #print('get_val_time', time.time() - start)
-            # for val in all_period_data:
-            #     for row in all_period_data[val].itertuples():
-            #         if math.isnan(row.profit_month):
-            #             print('has non before enter func')
-            #             exit(1)
-            # delete_list = [item for sublist in delete_list for item in sublist]
 
-            print
             
             equity_idx_monthly_equity_returns, monthly_equity_returns, monthly_factor_score, equity_idx_monthly_factor_score = transform_data(all_period_data, self.factor_name_lst)
 
             factor_names = list(monthly_factor_score.keys())
-            print(len(factor_names), factor_names)
 
             return equity_idx_monthly_equity_returns, monthly_equity_returns, monthly_factor_score, equity_idx_monthly_factor_score, self.daily_profit, BenchmarkDailyPct()
     
@@ -560,7 +543,6 @@ class factorModel:
 
         eachgroup_show = {group_name: pd.concat(frames, ignore_index=True) for group_name, frames in group_frames.items()}
 
-        print(f'time used is {time.time() - start}')
         
         # 计算 第一组 - 最后一组(多空对冲)
         final_group_name = "group_%s"%(self.groupnum-1)      # 最后一组的组名
@@ -683,7 +665,9 @@ class factorModel:
        # 拿回去期间基准指数的日涨跌幅数据
     
 
-    def run(self):
+    def calulate(self, Equity_Idx_Monthly_Equity_Returns, Monthly_Equity_Returns, 
+            Monthly_Factor_Score, Equity_Idx_Monthly_Factor_Score, 
+            Daily_Equity_Returns, benchmark_dailyret):
         '''
         Return Object
 
@@ -707,13 +691,12 @@ class factorModel:
             Type: pd.DataFrame （这个别改）
         '''
         
-        startTime = time.time()
+        
 
-        Equity_Idx_Monthly_Equity_Returns, Monthly_Equity_Returns, Monthly_Factor_Score, Equity_Idx_Monthly_Factor_Score, Daily_Equity_Returns, benchmark_dailyret= self.getData()
 
-        currTime = time.time()
-        print(f'Got data in {currTime - startTime} seconds')
-        startTime = currTime
+        # Equity_Idx_Monthly_Equity_Returns, Monthly_Equity_Returns, Monthly_Factor_Score, Equity_Idx_Monthly_Factor_Score, Daily_Equity_Returns, benchmark_dailyret= self.getData()
+
+
 
         try:    
             Daily_Equity_Returns = Daily_Equity_Returns.drop(columns=['trade_data'])
@@ -721,7 +704,6 @@ class factorModel:
             pass
 
         factor_names = list(Monthly_Factor_Score.keys())
-        print(len(factor_names), factor_names)
         month_names = list(Monthly_Equity_Returns.keys())
         self.month_names = month_names
         stock_names = list(Equity_Idx_Monthly_Factor_Score.keys())
@@ -777,8 +759,7 @@ class factorModel:
                     res = pd.DataFrame(res)
                     
                     factorWeights = self.calcFactorWeights(self.factorWeightMode, factor_names, HistoricalIC =currList, smartmode=self.factorWeightModeParams, equityScore=res)
-                    print(f'{month_names[month]} - {factorWeights}')
-                    print(f'CurrList Shape is {currList.shape}')
+
                 else:
                     factorWeights = self.calcFactorWeights(self.factorWeightMode, factor_names, HistoricalIC=currList, smartmode=self.factorWeightModeParams)
             else:
@@ -787,7 +768,7 @@ class factorModel:
                 elif self.factorWeightMode == 'category':
                     factorWeights = self.calcFactorWeights(self.factorWeightMode, factor_names, self.factorCategories)
 
-            # print(factorWeights)
+
             for name in stock_names:
                 name, score = self.calcEquityScore(name, factorWeights, Equity_Idx_Monthly_Factor_Score, month_names[month])
                 if name:
@@ -818,9 +799,7 @@ class factorModel:
             combinedIC['IC'].append(currIC)
             combinedIC['cumulative'].append(totalIC)
 
-        currTime = time.time()
-        print(f'Processed in {currTime - startTime} seconds')
-        startTime = currTime
+
 
         '''
         dict - groupedProfit
@@ -837,9 +816,7 @@ class factorModel:
         
         group_dailyret_dict = self.EachGroupPortRet(groupedProfit)
 
-        currTime = time.time()
-        print(f'EachGroupPortRet in {currTime - startTime} seconds')
-        startTime = currTime
+
 
         for name in group_dailyret_dict:
             # 策略回测指标
@@ -855,8 +832,10 @@ class factorModel:
         df_bt_indicator = pd.DataFrame(indicator_lst,index = range(len(indicator_lst)),columns=["group","年化收益率","夏普比率","最大回撤"]) # 回测期间分组的回测指标 output
         df_bt_alpha_indicator = pd.DataFrame(alpha_indicator_lst,index=range(len(alpha_indicator_lst)),columns=["group","年化超额收益率","超额最大回撤","calmar"])  # 超额评价指标 new output
 
-        currTime = time.time()
-        print(f'Last Section in {currTime - startTime} seconds')
-        startTime = currTime
+
         
         return combinedIC, df_group_net, df_group_alpha, df_bt_indicator, df_bt_alpha_indicator
+    
+    def run(self):
+        Equity_Idx_Monthly_Equity_Returns, Monthly_Equity_Returns, Monthly_Factor_Score, Equity_Idx_Monthly_Factor_Score, Daily_Equity_Returns, benchmark_dailyret = self.getData()
+        return self.calulate(Equity_Idx_Monthly_Equity_Returns, Monthly_Equity_Returns, Monthly_Factor_Score, Equity_Idx_Monthly_Factor_Score, Daily_Equity_Returns, benchmark_dailyret)
