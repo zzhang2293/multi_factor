@@ -682,6 +682,7 @@ class factorModel:
         3. Equity_Idx_Monthly_Factor_Score
             Type: Dict[Dict[list]]
             {Stock1 : {Month1 : [Stock1Factor1, Stock1Factor2, Stock1Factor3, etc...]}}
+            {Stock1 : {Month1 : [Stock1Factor1]}}
         
         4. Monthly_Factor_score
             Type: Dict[Dict[list]]
