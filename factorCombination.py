@@ -1,5 +1,6 @@
 from app.factor.factorModel import factorModel
 import itertools
+import copy
 model = factorModel()
 model.start = '20230101'
 import pandas as pd
@@ -43,7 +44,7 @@ import pandas as pd
 
         
 def get_factor_combination_lst(min:int, max:int, path:str):
-    df = pd.read_csv(path)
+    df = pd.read_csv(path,header=None)
     longshort_hedge_res_dict = {'因子组合': [], '年化收益率': [], '夏普比率': [] ,'最大回撤': []}
     group0_dict = {'因子组合': [], '年化超额收益率': [], '超额最大回撤': [], 'calmar': []}
     factor_lst = list(df.iloc[:,0])
@@ -52,13 +53,14 @@ def get_factor_combination_lst(min:int, max:int, path:str):
     nums_iter = 0
     for num_factor in range(min, max+1):
         for comb in itertools.combinations(factor_lst, num_factor):
-            target_equity_idx_monthly_factor_score = Equity_Idx_Monthly_Factor_Score.copy()
+
+            target_equity_idx_monthly_factor_score = copy.deepcopy(Equity_Idx_Monthly_Factor_Score)
             for stk in target_equity_idx_monthly_factor_score:
                 for month in target_equity_idx_monthly_factor_score[stk]:
-                    target_equity_idx_monthly_factor_score[stk][month] = [target_equity_idx_monthly_factor_score[stk][month][x] for x in [i for i, value in enumerate(list(comb)) if value in factor_lst]]
-            target_monthly_factor_score = Monthly_Factor_Score.copy()
-            target_monthly_factor_score = {key : target_monthly_factor_score[key] for key in list(comb)}
+                    target_equity_idx_monthly_factor_score[stk][month] = [target_equity_idx_monthly_factor_score[stk][month][x] for x in [i for i, value in enumerate(factor_lst) if value in list(comb)]]
 
+            target_monthly_factor_score = copy.deepcopy(Monthly_Factor_Score)
+            target_monthly_factor_score = {key : target_monthly_factor_score[key] for key in list(comb)}
 
             _, _, _, df_bt_indicator, df_bt_alpha_indicator = model.calculate(Equity_Idx_Monthly_Equity_Returns, Monthly_Equity_Returns, target_monthly_factor_score,
                                                                                target_equity_idx_monthly_factor_score, Daily_Equity_Returns, benchmark_dailyret)
@@ -84,9 +86,4 @@ def get_factor_combination_lst(min:int, max:int, path:str):
     long_short_df.to_csv('longshort_res.csv')
     group0_df.to_csv('group0.csv')
 
-
-
-
-    
-
-val = get_factor_combination_lst(1,2, 'factor.csv')
+val = get_factor_combination_lst(1,1, 'factor.csv')
