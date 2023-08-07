@@ -493,7 +493,7 @@ class factorModel:
         # #return a list of list of equities
         return [list(group) for group in groups]
     
-    def calcBasketWeights(self, equityBasket):
+    def calcBasketWeights(self, equityBasket): #docs done
             
         '''
             函数: calcBasketWeights (non-async)
@@ -696,13 +696,6 @@ class factorModel:
         5. Daily_Equity_Returns
             Type: pd.DataFrame （这个别改）
         '''
-        
-        
-
-
-        # Equity_Idx_Monthly_Equity_Returns, Monthly_Equity_Returns, Monthly_Factor_Score, Equity_Idx_Monthly_Factor_Score, Daily_Equity_Returns, benchmark_dailyret= self.getData()
-
-
 
         try:    
             Daily_Equity_Returns = Daily_Equity_Returns.drop(columns=['trade_data'])
