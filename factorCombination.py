@@ -2,9 +2,6 @@ import time
 from app.factor.factorModel import factorModel
 import itertools
 import copy
-model = factorModel()
-model.start = '20201212'
-model.end = '20230731'
 import pandas as pd
 import os
 import csv
@@ -129,5 +126,7 @@ def get_factor_combination_lst(min:int, max:int, path:str):
 #     for month in range(0, len(month_names))
 
 
-
+model = factorModel()
+model.start = '20201212'
+model.end = '20230731'
 val = get_factor_combination_lst(1,1, 'factor.csv')

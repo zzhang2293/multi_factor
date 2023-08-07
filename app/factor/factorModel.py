@@ -37,7 +37,6 @@ class factorModel:
 
         self.factorWeightMode = 'equal'
         self.factorCategories = [1, 1, 2]
-        self.factorWeightModeParams = 'Correlation'
         self.EvalPeriod = 31
         self.minEvalPeriod = 4
         self.benchmark = '000905.SH'
@@ -328,78 +327,73 @@ class factorModel:
     
         return run()
 
-    def calcIC(self, dateList, scoreList, returnList):
-
+    def calcIC(self, dateList, scoreList, returnList): #docs done
         '''
-            函数: calcIC (non-async)   TODO output method
+            函数: calcIC
             -------
-            1) 摘要: 此函数用于计算单个因子的历史IC值
+            1) 摘要: 此函数用于计算单个因子的每月历史IC值
             2) 函数输入
-                - dateList [REQUIRED]
-                    每次算分的日期 (list)
-                - scoreList [REQUIRED]
-                    - list of list of scores, each list is a list of scores for a given date (list[list[float]])
-                - returnList [REQUIRED]
-                    - list of list of scores, each list is a list of scores for a given date (list[list[float]])
-            3) 输出: (list, list[float])
-            4) 可控变量:
-                N/A
-            5) 案例
-                N/A
+            - dateList [必须]
+                月度日期列表 (list[str])
+            - scoreList [必须]
+                因子对每月每个股票分数列表 (list[list[float]]), 外层索引为月度, 内层索引为个股
+            - returnList [REQUIRED]
+                因子对每月每个股票收益列表 (list[list[float]]), 外层索引为月度, 内层索引为个股
+            3) 输出: 
+            - dateList 
+                月度日期列表，和输入一样，用于后续校验 (list[str])
+            - ICList
+                因子每月历史IC值 (list[float])
         '''
         
         ICList = []
 
+        # 遍历每个月
         for i in dateList:
             scores = scoreList[i]
             returns = returnList[i]
-
+            
+            # 计算IC值 (np.corrcoef, [0, 1]是因为返回的是矩阵)
             ICList.append(np.corrcoef(scores, returns)[0,1])
 
+        # 校验
         if len(ICList) != len(dateList):
             raise Exception('Error: ICList Length != dateList Length | ERROR!')
 
         return dateList, ICList
     
-    def calcFactorWeights(self, mode:str, listOfFactors:list, listOfCategories:list = [], HistoricalIC:list = [], smartmode = 'IRSolver', equityScore = None) -> list:
+    def calcFactorWeights(self, mode, listOfFactors, listOfCategories = None, HistoricalIC = None, equityScore = None): #docs done
 
         '''
-            函数: calcFactorWeights (synchronous)
+            函数: calcFactorWeights
             -------
-            1) 摘要：此函数用于计算单期各因子的权重
-            2) 函数输入：
-                1) mode [REQUIRED] (str)
-                    - 计算方式, 有三种: equal(等权重), category(类别等权重), smart(优化权重)
-                2) listOfFactors [REQUIRED] (list[str])
-                    - 因子名称序列
-                3) listOfCategories [OPTIONAL, REQUIRED if mode = 'category'] (list[str]) 
-                    - 分类序列, 用于category模式
-                4) HistoricalIC [OPTIONAL, REQUIRED if mode = 'smart'] (pd.DataFrame)
-                    - 历史各因子各月IC分数, 用于smart模式
-                    - 数据结构：
-                        - index: 日期 (日期越早越前)
-                        - columns: 因子名称 (与listOfFactors顺序一致)
-                5) smartmode [OPTIONAL, REQUIRED if mode = 'smart'] (str)
-                    - 优化模式, 现在就一种: Correlation, 用于smart模式
-                6) equityScore [OPTIONAL, REQUIRED if mode = 'smart'] (pd.DataFrame)
-                    - 历史各股票各日因子分数, 用于smart模式
-                    - 数据结构：
-                        - index: 无
-                        - columns: 因子名称
-                            *注: 每行均为该行因子对各股票各日的因子分数, 做了np.vstack处理
-            3) 输出: list[float], 每个因子的权重
-            4) 可控变量: 无
+            1) 摘要：此函数用于计算单期各因子的最优权重
+            2) 函数输入
+            - mode [必须]
+                权重计算模式, 可以是equal(等权重), category(人工分组), smart(优化权重) (str)
+            - listOfFactors [必须] 
+                因子名称序列 (list[str])
+            - listOfCategories [非必须, 只用于category模式] 
+                人工分类序列 (list[int]) 
+                    例: 如果有5个因子, 前三个一组, 后两个一组, 则输入的序列为 [1, 1, 1, 2, 2]
+            - HistoricalIC [非必须, 只用于smart模式]
+                因子历史IC值序列 (2维 pd.DataFrame, 横轴是因子, 纵轴是时间)
+            - equityScore [非必须, 只用于smart模式]
+                因子对每个股票的分数序列 (2维 pd.DataFrame, 横轴是因子, 纵轴是时间)
+            3) 输出: 
+            - weight 
+                各因子的权重, 因子顺序和输入的listOfFactors一致 (list[float])
         '''
 
         if mode not in ['equal', 'category', 'smart']:
             raise Exception('Wrong Category!')
 
-        #所有的因子权重都一样
+        #等权重
         if mode == 'equal':
             #create a list of size len(listOfFactors) with equal weights summing up to 1
             return [1 / len(listOfFactors)] * len(listOfFactors)
         
-        #所有的因子大类权重一样 每大类里面的每个因子权重也一样
+        #人工分组
         elif mode == 'category':
             if len(listOfCategories) != len(listOfFactors):
                 raise Exception('Error Category Size')
@@ -415,46 +409,49 @@ class factorModel:
 
             return res
         
-        #基于历史IC来选
+        #优化权重
         elif mode == 'smart':
             if HistoricalIC.shape[1] != len(listOfFactors):
                 raise Exception('Error IC Size')
-
-            if smartmode == 'Correlation': #best
                 
-                covar = np.cov(HistoricalIC, rowvar=False)
-                corr = np.corrcoef(equityScore, rowvar=False)
-                D = np.diag(np.sqrt(np.diag(covar)))
-                covar = D @ nlg.inv(corr) @ D
-                mat = nlg.inv(covar)                 
-                weight = mat*np.mat(HistoricalIC.mean()).reshape(len(mat),1)
-                weight = np.array(weight.reshape(len(weight),))[0]
-                weight = weight.tolist()
+            #ic的协方差
+            covar = np.cov(HistoricalIC, rowvar=False)
+            #每个因子对个股分数的相关性
+            corr = np.corrcoef(equityScore, rowvar=False)
+            D = np.diag(np.sqrt(np.diag(covar)))
+
+            #协方差 = M * 相关性 * M, M可以是任意矩阵
+            #我们因为算IC的协方差 用IC相关性的时候 数据太少 所以我们在这用分数的相关性替换
+            covar = D @ nlg.inv(corr) @ D
+            mat = nlg.inv(covar)                 
+            weight = mat*np.mat(HistoricalIC.mean()).reshape(len(mat),1)
+            weight = np.array(weight.reshape(len(weight),))[0]
+            weight = weight.tolist()
                 
             return weight
             
-    def calcEquityScore(self, equityName:str, weights:list, scoresMap:dict, month:int):
+    def calcEquityScore(self, equityName, weights, scoresMap, month): #docs done
 
         '''
-            函数: calcEquityScores (non-async)
+            函数: calcEquityScore
             -------
-            1) 摘要: 此函数调用calcFactorWeights函数以及因子的分数来计算个股的分数
+            1) 摘要：此函数用于计算单期单个股票的多因子总分
             2) 函数输入
-                - equityName [REQUIRED]
-                    股票名称
-                - weights [REQUIRED]
-                    现在所有因子的权重
-                - scores [REQUIRED]
-                    每个因子对应的分数
+            - equityName [必须]
+                个股名称 (str)
+            - weights [必须] 
+                计算好的因子权重 (list[int])
+            - scoresMap [必须] 
+                个股各月分数 (dict[dict[list]], 第一层dict的索引是个股名(equityName), 第二层dict的索引是月份名(month))
+            - month [必须]
+                特定月份名称 (str)
             3) 输出: 
-                - (str, float), 个股的名称和分数
-            4) 可控变量:
-                N/A
-            5) 案例
-                N/A
+            - (str(个股名称，校验用), float(个股分数))
         '''
+        
         if equityName in scoresMap:
             if month in scoresMap[equityName]:
+                #用np.dot 计算两个list的向量内积
                 return (equityName, np.dot(weights, scoresMap[equityName][month]))
             else:
                 #print(f'{equityName} NO FACTOR SCORE DATA for [MONTH {month}]')
@@ -463,44 +460,53 @@ class factorModel:
             #print(f'{equityName} NO FACTOR SCORE DATA [ALL PERIOD]')
             return (None, None)
 
-    def rankEquity(self, equityNameList, equityScoreList) -> list:
+    def rankEquity(self, equityNameList, equityScoreList): #docs done
 
         '''
             函数: rankEquity (non-async)
             -------
-            1) 摘要: 此函数用于对个股的分数进行排序
+            1) 摘要: 此函数用于对个股进行基于分数的分组
             2) 函数输入
-                - equityNameList [REQUIRED]
-                    股票名称列表
-                - equityScoreList [REQUIRED]
-                    股票分数列表
-                - numOfGroups [REQUIRED]
-                    分组数量
-            3) 输出:
-                - list[list[str]], 每个list里面是一个分组
-            4) 可控变量:
-                numGroups - 分成多少组
-            5) 案例
-                N/A
+            - equityNameList [必须]
+                个股名称列表 (list[str])
+            - equityScoreList [必须] 
+                个股分数列表 (list[float], 顺序对应equityNameList)
+            3) 输出: 
+            - list[list[str]], 每个list里面是一个分组, 里面是个股名称, 每组里股票顺序暂无意义
         '''
-
-        #self.groupnum = 10  # total groups
     
+        #变成np会快一点
         equityScoreList = np.array(equityScoreList).astype(float)
+        
+        #从高到低还是从低到高
         if self.rankLowestFirst == "0":
             sort_index = np.argsort(equityScoreList)[::-1]
         elif self.rankLowestFirst == "1":
             sort_index = np.argsort(equityScoreList)
             
+        
         sortedNames = np.array(equityNameList)[sort_index]
+        
+        #分成n组
         groups = np.array_split(sortedNames, self.groupnum)
 
         # #return a list of list of equities
         return [list(group) for group in groups]
     
-    def calcBasketWeights(self, equityBasket:list) -> list[float]:
-            #for now, equal weights
-            return [1/len(equityBasket)] * len(equityBasket)
+    def calcBasketWeights(self, equityBasket):
+            
+        '''
+            函数: calcBasketWeights (non-async)
+            -------
+            1) 摘要: 此函数用于对单组内个股的权重计算
+            2) 函数输入
+            - equityBasket [必须]
+                组内股票名称 (list[str])
+            3) 输出: 
+            - list[float], 个股权重
+        '''
+        #（现阶段暂包含未计算，权当等权）
+        return [1/len(equityBasket)] * len(equityBasket)
 
     # 计算持有期每组的组合收益率
     def EachGroupPortRet(self,all_period_data):
@@ -663,7 +669,6 @@ class factorModel:
         return result_df,indicator_lst
    
        # 拿回去期间基准指数的日涨跌幅数据
-    
 
     def calculate(self, Equity_Idx_Monthly_Equity_Returns, Monthly_Equity_Returns, 
             Monthly_Factor_Score, Equity_Idx_Monthly_Factor_Score:dict, 
@@ -742,30 +747,25 @@ class factorModel:
                 if currList.shape[0] > self.EvalPeriod:
                     currList = currList.iloc[-self.EvalPeriod:]
                     
-                if self.factorWeightModeParams == 'Correlation':
-
-                    #get current monthly score
-                    res = defaultdict(list)
-                    endMonth = month_names[month]
-                    if month > self.EvalPeriod:
-                        startMonth = month_names[month - self.EvalPeriod]
-                    else:
-                        startMonth = month_names[0]
-
-                    for factor in Monthly_Factor_Score: # {factor1 : {month1 : [], month2 : []}}
-                        for date in Monthly_Factor_Score[factor]:
-                            #print(date, int(date) >= int(startMonth), int(date) <= int(endMonth))
-                            if int(date) >= int(startMonth) and int(date) <= int(endMonth):
-                                res[factor] += Monthly_Factor_Score[factor][date]
-                            if int(date) >= int(endMonth):
-                                break
-
-                    res = pd.DataFrame(res)
-                    
-                    factorWeights = self.calcFactorWeights(self.factorWeightMode, factor_names, HistoricalIC =currList, smartmode=self.factorWeightModeParams, equityScore=res)
-
+                #get current monthly score
+                res = defaultdict(list)
+                endMonth = month_names[month]
+                if month > self.EvalPeriod:
+                    startMonth = month_names[month - self.EvalPeriod]
                 else:
-                    factorWeights = self.calcFactorWeights(self.factorWeightMode, factor_names, HistoricalIC=currList, smartmode=self.factorWeightModeParams)
+                    startMonth = month_names[0]
+
+                for factor in Monthly_Factor_Score: # {factor1 : {month1 : [], month2 : []}}
+                    for date in Monthly_Factor_Score[factor]:
+                        #print(date, int(date) >= int(startMonth), int(date) <= int(endMonth))
+                        if int(date) >= int(startMonth) and int(date) <= int(endMonth):
+                            res[factor] += Monthly_Factor_Score[factor][date]
+                        if int(date) >= int(endMonth):
+                            break
+
+                res = pd.DataFrame(res)
+                
+                factorWeights = self.calcFactorWeights(self.factorWeightMode, factor_names, HistoricalIC =currList, equityScore=res)
             else:
                 if self.factorWeightMode == 'equal':
                     factorWeights = self.calcFactorWeights(self.factorWeightMode, factor_names)
@@ -843,5 +843,6 @@ class factorModel:
         return combinedIC, df_group_net, df_group_alpha, df_bt_indicator, df_bt_alpha_indicator
     
     def run(self):
+
         Equity_Idx_Monthly_Equity_Returns, Monthly_Equity_Returns, Monthly_Factor_Score, Equity_Idx_Monthly_Factor_Score, Daily_Equity_Returns, benchmark_dailyret = self.getData()
         return self.calculate(Equity_Idx_Monthly_Equity_Returns, Monthly_Equity_Returns, Monthly_Factor_Score, Equity_Idx_Monthly_Factor_Score, Daily_Equity_Returns, benchmark_dailyret)
