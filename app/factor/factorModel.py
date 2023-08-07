@@ -795,17 +795,19 @@ class factorModel:
                 #计算权重
                 factorWeights = self.calcFactorWeights(self.factorWeightMode, factor_names, HistoricalIC =currList, equityScore=res)
             else: #如果不用优化的话，则无需计算IC
+                #全部均权重
                 if self.factorWeightMode == 'equal':
                     factorWeights = self.calcFactorWeights(self.factorWeightMode, factor_names)
+                #组内均权重
                 elif self.factorWeightMode == 'category':
                     factorWeights = self.calcFactorWeights(self.factorWeightMode, factor_names, self.factorCategories)
+                #人工决定权重（人工阈值）
                 elif self.factorWeightMode == 'customized':
                     factorWeights = self.userDefinedFactorWeights
             
             if len(factorWeights) != len(factor_names):
                 print('factorWeights length not equal to factor_names length!')
                 continue
-
 
             #有权重以后，我们给每个股票算个分，然后把股票名字和分对应存起来
             for name in stock_names:
