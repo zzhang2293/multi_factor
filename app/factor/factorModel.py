@@ -41,6 +41,7 @@ class factorModel:
         self.minEvalPeriod = 4
         self.benchmark = '000905.SH'
         self.rankLowestFirst = "0"
+        self.userDefinedFactorWeights = []
 
     def getData(self):
 
@@ -798,6 +799,12 @@ class factorModel:
                     factorWeights = self.calcFactorWeights(self.factorWeightMode, factor_names)
                 elif self.factorWeightMode == 'category':
                     factorWeights = self.calcFactorWeights(self.factorWeightMode, factor_names, self.factorCategories)
+                elif self.factorWeightMode == 'customized':
+                    factorWeights = self.userDefinedFactorWeights
+            
+            if len(factorWeights) != len(factor_names):
+                print('factorWeights length not equal to factor_names length!')
+                continue
 
 
             #有权重以后，我们给每个股票算个分，然后把股票名字和分对应存起来
