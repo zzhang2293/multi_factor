@@ -143,6 +143,7 @@ class factorModelSingleFactor(factorModel):
             for stk in target_equity_idx_monthly_factor_score:
                 for month in target_equity_idx_monthly_factor_score[stk]:
                     target_equity_idx_monthly_factor_score[stk][month] = [target_equity_idx_monthly_factor_score[stk][month][x] for x in [i for i, value in enumerate(factor_name_list) if value in list(factor)]]
+                    
 
             bt, bt_alpha = self.calc_one_factor(stock_names, month_list, target_equity_idx_monthly_factor_score, Daily_Equity_Returns, benchmark_dailyret)
 

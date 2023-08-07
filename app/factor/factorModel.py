@@ -361,7 +361,7 @@ class factorModel:
 
         return dateList, ICList
     
-    def calcFactorWeights(self, mode:str, listOfFactors:list[str], listOfCategories:list[str] = [], HistoricalIC:list[list[float]] = [], smartmode = 'IRSolver', equityScore = None) -> list:
+    def calcFactorWeights(self, mode:str, listOfFactors:list, listOfCategories:list = [], HistoricalIC:list = [], smartmode = 'IRSolver', equityScore = None) -> list:
 
         '''
             函数: calcFactorWeights (synchronous)
@@ -463,7 +463,7 @@ class factorModel:
             #print(f'{equityName} NO FACTOR SCORE DATA [ALL PERIOD]')
             return (None, None)
 
-    def rankEquity(self, equityNameList, equityScoreList) -> list[list[str]]:
+    def rankEquity(self, equityNameList, equityScoreList) -> list:
 
         '''
             函数: rankEquity (non-async)
@@ -484,7 +484,7 @@ class factorModel:
                 N/A
         '''
 
-        self.groupnum = 10  # total groups
+        #self.groupnum = 10  # total groups
     
         equityScoreList = np.array(equityScoreList).astype(float)
         if self.rankLowestFirst == "0":
@@ -717,6 +717,7 @@ class factorModel:
 
         if self.factorWeightMode != 'smart':
             if self.factorWeightMode == 'equal':
+    #    def calcFactorWeights(self, mode:str, listOfFactors:list, listOfCategories:list, HistoricalIC:list, smartmode = 'IRSolver', equityScore = None
                 factorWeights = self.calcFactorWeights(self.factorWeightMode, factor_names)
             elif self.factorWeightMode == 'category':
                 factorWeights = self.calcFactorWeights(self.factorWeightMode, factor_names, self.factorCategories)
@@ -779,6 +780,8 @@ class factorModel:
                     scoreList.append(score)
             
             equityGroups = self.rankEquity(nameList, scoreList)
+            
+
 
             try:
                 daily_returns_this_month = Daily_Equity_Returns[(Daily_Equity_Returns['trade_date'] >= month_names[month]) 
@@ -816,7 +819,7 @@ class factorModel:
         indicator_lst = []              # 回测期间分组的回测指标
         df_group_alpha = pd.DataFrame()   # 回测期间分组的alpha曲线 new output
         alpha_indicator_lst = []          # 回测期间分组的alpha回测指标
-        
+        groupedProfit[list(groupedProfit.keys())[-1]]['group_0'].to_csv('best_stk.csv')
         group_dailyret_dict = self.EachGroupPortRet(groupedProfit)
 
 
@@ -834,7 +837,7 @@ class factorModel:
             
         df_bt_indicator = pd.DataFrame(indicator_lst,index = range(len(indicator_lst)),columns=["group","年化收益率","夏普比率","最大回撤"]) # 回测期间分组的回测指标 output
         df_bt_alpha_indicator = pd.DataFrame(alpha_indicator_lst,index=range(len(alpha_indicator_lst)),columns=["group","年化超额收益率","超额最大回撤","calmar"])  # 超额评价指标 new output
-
+        print(df_bt_indicator)
 
         
         return combinedIC, df_group_net, df_group_alpha, df_bt_indicator, df_bt_alpha_indicator

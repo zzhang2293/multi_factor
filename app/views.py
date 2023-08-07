@@ -1,15 +1,34 @@
+from io import BytesIO
 from django.template import loader
 from django.http import HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.http import JsonResponse
+from django.http import FileResponse
 import json
+import csv
+import pandas as pd
 from app.factor.factorModel import factorModel
-
-
+import zipfile
+import os
 
 analysisMethod = factorModel()
 scope = analysisMethod.universe_index
 
+'''
+    result that will show on web page
+    these global variables are used to convert to csv file and send to front
+    data structure: 
+    combinedIC(dict): ['month': [list of month], 'IC': [list of ic value], 'cumulative': [list of cumulative ic]]
+
+    df_group_net(DataFrame): [index = trade_date, column = ['group_0', 'group_1', 'group2', 'group3', 'longshort_hedge']]
+
+    df_group_alpha(DataFrame): same as df_group_net, 
+
+    df_bt_indicator(DataFrame): [index = [1,2,3,4,5 ...], column = ["group", "年化收益率","夏普比率","最大回撤"]]
+
+    df_bt_alpha)indicator(DataFrame) : [index = [1,2,3,4,5 ....], column = ['group', "年化超额收益率","超额最大回撤","calmar"]]
+
+'''
 
 def members(request):
     template = loader.get_template('myfirst.html')
@@ -45,6 +64,8 @@ def collect_data(requests):
             endDateModified = data["endDate"].split("T")[0]
             endDateModified = endDateModified.replace("-", "")
             analysisMethod.end = endDateModified 
+        if data['benchmark'] != '':
+            analysisMethod.benchmark = data['benchmark']
         factor_list = []
         if len(factor) > 0:
             for val in factor:
@@ -59,7 +80,9 @@ def collect_data(requests):
         print(analysisMethod.groupnum)
         print(analysisMethod.universe_index)
         print(analysisMethod.rankLowestFirst)
+        print(analysisMethod.benchmark)
         combinedIC, df_group_net,df_group_alpha, df_bt_indicator, df_bt_alpha_indicator = analysisMethod.run()
+        save_csv(combinedIC, df_group_net, df_bt_indicator, df_bt_alpha_indicator)
         group_data = df_group_net.to_dict()
         group_data_alpha = df_group_alpha.to_dict()
         group_data["years"] = list(df_group_net.index)
@@ -89,8 +112,31 @@ def collect_data(requests):
         res["indicator"] = table_data_trans
         res['indicator_alpha'] = table_data_trans2
         res["IC_val"] = IC_analysis
+        result = res
         res_json = json.dumps(res)
         #analysisMethod.universe_index = scope
         
 
         return HttpResponse(res_json)
+    
+
+
+@csrf_exempt
+def get_csv_output(request):
+
+    
+    return FileResponse(open('csv_result/packed_files.ZIP', 'rb'), as_attachment=True, filename="packed_files.zip")
+
+def save_csv(combinedIC, df_group_net, df_bt_indicator, df_bt_alpha_indicator):
+    IC_Dataframe = pd.DataFrame(combinedIC)
+    if not os.path.exists('csv_result'):
+        os.makedirs('csv_result')
+    IC_Dataframe.to_csv("csv_result/IC_result.csv")
+    df_group_net.to_csv('csv_result/grouped_month_ret.csv')
+    df_bt_indicator.to_csv('csv_result/indicator.csv')
+    df_bt_alpha_indicator.to_csv('csv_result/alpha_indicator.csv')
+    with zipfile.ZipFile('csv_result/packed_files.ZIP', 'w') as zipped:
+        zipped.write('csv_result/IC_result.csv')
+        zipped.write('csv_result/grouped_month_ret.csv')
+        zipped.write('csv_result/indicator.csv')
+        zipped.write('csv_result/alpha_indicator.csv')
