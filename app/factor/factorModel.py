@@ -702,8 +702,6 @@ class factorModel:
         except:
             pass
 
-
-
         factor_names = list(Monthly_Factor_Score.keys())
         month_names = list(Monthly_Equity_Returns.keys())
         self.month_names = month_names
@@ -713,12 +711,10 @@ class factorModel:
         totalIC = 0
         combinedIC = {'month': [], 'IC': [], 'cumulative': []}
 
-        if self.factorWeightMode != 'smart':
-            if self.factorWeightMode == 'equal':
-    #    def calcFactorWeights(self, mode:str, listOfFactors:list, listOfCategories:list, HistoricalIC:list, smartmode = 'IRSolver', equityScore = None
-                factorWeights = self.calcFactorWeights(self.factorWeightMode, factor_names)
-            elif self.factorWeightMode == 'category':
-                factorWeights = self.calcFactorWeights(self.factorWeightMode, factor_names, self.factorCategories)
+        if self.factorWeightMode == 'equal':
+            factorWeights = self.calcFactorWeights(self.factorWeightMode, factor_names)
+        elif self.factorWeightMode == 'category':
+            factorWeights = self.calcFactorWeights(self.factorWeightMode, factor_names, self.factorCategories)
         elif self.factorWeightMode == 'smart':
             ICList = []
 
