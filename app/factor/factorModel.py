@@ -420,8 +420,9 @@ class factorModel:
             corr = np.corrcoef(equityScore, rowvar=False)
             D = np.diag(np.sqrt(np.diag(covar)))
 
-            #协方差 = M * 相关性 * M, M可以是任意矩阵
-            #我们因为算IC的协方差 用IC相关性的时候 数据太少 所以我们在这用分数的相关性替换
+            #IC协方差 = D * IC相关性 * D, D可以是任意矩阵
+            #我们因为算IC的协方差 用IC相关性的时候 数据太少 所以我们在这用分数的相关性“强行替换”
+            # 所以后面的协方差是 -> D * 分数相关性 * D
             covar = D @ nlg.inv(corr) @ D
             mat = nlg.inv(covar)                 
             weight = mat*np.mat(HistoricalIC.mean()).reshape(len(mat),1)
@@ -463,7 +464,7 @@ class factorModel:
     def rankEquity(self, equityNameList, equityScoreList): #docs done
 
         '''
-            函数: rankEquity (non-async)
+            函数: rankEquity
             -------
             1) 摘要: 此函数用于对个股进行基于分数的分组
             2) 函数输入
@@ -496,7 +497,7 @@ class factorModel:
     def calcBasketWeights(self, equityBasket): #docs done
             
         '''
-            函数: calcBasketWeights (non-async)
+            函数: calcBasketWeights
             -------
             1) 摘要: 此函数用于对单组内个股的权重计算
             2) 函数输入
@@ -670,31 +671,66 @@ class factorModel:
    
        # 拿回去期间基准指数的日涨跌幅数据
 
-    def calculate(self, Equity_Idx_Monthly_Equity_Returns, Monthly_Equity_Returns, 
-            Monthly_Factor_Score, Equity_Idx_Monthly_Factor_Score:dict, 
-            Daily_Equity_Returns, benchmark_dailyret):
+    # 辅助函数，用于一次跑多个测试组合
+    def calculate(self, Equity_Idx_Monthly_Equity_Returns, Monthly_Equity_Returns, Monthly_Factor_Score, Equity_Idx_Monthly_Factor_Score:dict, Daily_Equity_Returns, benchmark_dailyret): #docs done
+
         '''
-        Return Object
+            函数: calculate
+            -------
+            1) 摘要: 此函数使用上述所有辅助函数计算各项指标
+            2) 函数输入
+            - Equity_Idx_Monthly_Equity_Returns [必须]
+                个股每月的回报率，最外层索引为个股名称
+                Dict[Dict[float]]
+                {股票1 : {月份1 : 月收益, 月份2 : 月收益, ...}}
+            - Monthly_Equity_Returns [必须]
+                个股每月的回报率，最外层索引为月度名称
+                Dict[list]
+                {月份1 : [股票1的月收益, 股票2的月收益, 股票3的月收益, ...]}
+            - Monthly_Factor_Score [必须]
+                个股每月的因子得分，最外层索引为因子名称
+                Dict[Dict[list]]
+                {因子1 : {月份1 : [股票1分数, 股票2分数, 股票3分数, ...]}}
+            - Equity_Idx_Monthly_Factor_Score [必须]
+                个股每月的因子得分，最外层索引为个股名称
+                Dict[Dict[list]]
+                {股票1 : {月份1 : [因子1分数, 因子2分数, 因子3分数, ...]}}
+            - Daily_Equity_Returns [必须]
+                个股每日回报率
+                pd.DataFrame
+                index: 序号（无意义
+                column: ts_code(股票代码) profit(单日收益) trade_date(交易日)
+            - benchmark_dailyret [必须]
+                对应指数每日回报率
+                pd.DataFrame
+                index: 序号（无意义）
+                column: pct_chg(单日收益) trade_date(交易日)
 
-        1. Equity_Idx_Monthly_Equity_Returns
-            Type: Dict[list]
-            {Stock1 : {Month1 : return, Month2 : return, etc...}}
-        
-        2. Monthly_Equity_Returns
-            Type: Dict[list]
-            {Month1 : [Stock1Return, Stock2Return, Stock3Return, etc...], Month2 : []...}
-
-        3. Equity_Idx_Monthly_Factor_Score
-            Type: Dict[Dict[list]]
-            {Stock1 : {Month1 : [Stock1Factor1, Stock1Factor2, Stock1Factor3, etc...]}}
-            {Stock1 : {Month1 : [Stock1Factor1]}}
-        
-        4. Monthly_Factor_score
-            Type: Dict[Dict[list]]
-            {Factor1 : {Month1 : [Stock1FactorScore, Stock2FactorScore, Stock3FactorScore, etc...], Month2 : []...},}}    
-
-        5. Daily_Equity_Returns
-            Type: pd.DataFrame （这个别改）
+            3) 输出: 
+            - combinedIC
+                所选因子的共同各月的IC值和累积IC值
+                Dict[list]
+                {'month': [交易日列表], 'IC': [各月IC值], 'cumulative': [累计IC值]}
+            - df_group_net
+                各分组每月的净值
+                pd.DataFrame
+                index = 交易日
+                column = ['group_0', 'group_1', 'group2', 'group3', ..., 'longshort_hedge']
+            - df_group_alpha
+                各分组每月的alpha
+                pd.DataFrame
+                index = 交易日
+                column = ['group_0', 'group_1', 'group2', 'group3', ..., 'longshort_hedge']
+            - df_bt_indicator
+                各分组各类收益数据合集 (此数据会被展示)
+                pd.DataFrame
+                index无意义
+                column = ["group", "年化收益率","夏普比率","最大回撤"]
+            - df_bt_alpha_indicator
+                各分组各类alpha数据合集 (此数据会被展示)
+                pd.DataFrame
+                index无意义
+                column = ['group', "年化超额收益率","超额最大回撤","calmar"]
         '''
 
         try:    
@@ -711,11 +747,10 @@ class factorModel:
         totalIC = 0
         combinedIC = {'month': [], 'IC': [], 'cumulative': []}
 
-        if self.factorWeightMode == 'equal':
-            factorWeights = self.calcFactorWeights(self.factorWeightMode, factor_names)
-        elif self.factorWeightMode == 'category':
-            factorWeights = self.calcFactorWeights(self.factorWeightMode, factor_names, self.factorCategories)
-        elif self.factorWeightMode == 'smart':
+        #如果要优化，则需要计算各因子IC
+        #优化模式下 权重每个月都不一样，会在下面的循环中计算，这里只是计算IC
+        if self.factorWeightMode == 'smart':
+            
             ICList = []
 
             for factor in factor_names:
@@ -725,18 +760,20 @@ class factorModel:
             ICList.index = month_names
             ICList.columns = factor_names
         
+        #每个月循环计算个股收益
         for month in range((self.minEvalPeriod if self.factorWeightMode == 'smart' else 0), len(month_names)):
 
             nameList, scoreList = [], []
 
+            #第一步：计算权重
             if self.factorWeightMode == 'smart':
-                #get current IC
+                #拿到之前的IC值（不包含当月）
                 currList = ICList.loc[ICList.index[ICList.index < month_names[month]]]
 
                 if currList.shape[0] > self.EvalPeriod:
                     currList = currList.iloc[-self.EvalPeriod:]
                     
-                #get current monthly score
+                #拿到当月和之前的因子打分（包含当月）
                 res = defaultdict(list)
                 endMonth = month_names[month]
                 if month > self.EvalPeriod:
@@ -754,24 +791,32 @@ class factorModel:
 
                 res = pd.DataFrame(res)
                 
+                #计算权重
                 factorWeights = self.calcFactorWeights(self.factorWeightMode, factor_names, HistoricalIC =currList, equityScore=res)
-            else:
+            else: #如果不用优化的话，则无需计算IC
                 if self.factorWeightMode == 'equal':
                     factorWeights = self.calcFactorWeights(self.factorWeightMode, factor_names)
                 elif self.factorWeightMode == 'category':
                     factorWeights = self.calcFactorWeights(self.factorWeightMode, factor_names, self.factorCategories)
 
 
+            #有权重以后，我们给每个股票算个分，然后把股票名字和分对应存起来
             for name in stock_names:
                 name, score = self.calcEquityScore(name, factorWeights, Equity_Idx_Monthly_Factor_Score, month_names[month])
                 if name:
                     nameList.append(name)
                     scoreList.append(score)
             
+            #根据分数给股票分成n组
             equityGroups = self.rankEquity(nameList, scoreList)
             
-
-
+            #变化数据结构，方便后面计算 
+            '''
+            dict - groupedProfit
+                {month1 : {group1:df, group2:df, group3:df}}
+                每个df有三个col, 叫ts_code(股票代码) profit(日收益) trade_date(交易日)
+            '''
+            #按月分组，但是这里提取每组每日的收益率
             try:
                 daily_returns_this_month = Daily_Equity_Returns[(Daily_Equity_Returns['trade_date'] >= month_names[month]) 
                                     & (Daily_Equity_Returns['trade_date'] < month_names[month+1])]
@@ -782,7 +827,8 @@ class factorModel:
                 # Filter df where 'ts_code' is in the current group
                 df_group = daily_returns_this_month[daily_returns_this_month['ts_code'].isin(group)]
                 groupedProfit[month_names[month]][f'group_{i}'] = df_group.reset_index(drop=True)  
-            
+
+            #计算我们多因子策略总体的月IC            
             returnArr = []
             for stock in nameList:
                 returnArr.append(Equity_Idx_Monthly_Equity_Returns[stock][month_names[month]])
@@ -793,25 +839,14 @@ class factorModel:
             combinedIC['month'].append(month_names[month])
             combinedIC['IC'].append(currIC)
             combinedIC['cumulative'].append(totalIC)
-
-
-
-        '''
-        dict - groupedProfit
-            key = 挪仓日 (6个key)
-            value = list[]
-                lst里面有10个df, 每个df有三个col, 叫ts_code profit trade_date
-            
-            {month1 : {group1:df, group2:df, group3:df}}
-        '''
+        
+        #老代码，主要用groupedProfit和benchmark_dailyret来计算每组的收益率，alpha等
         df_group_net = pd.DataFrame()   # 回测期间分组净值曲线 output
         indicator_lst = []              # 回测期间分组的回测指标
         df_group_alpha = pd.DataFrame()   # 回测期间分组的alpha曲线 new output
         alpha_indicator_lst = []          # 回测期间分组的alpha回测指标
         groupedProfit[list(groupedProfit.keys())[-1]]['group_0'].to_csv('best_stk.csv')
         group_dailyret_dict = self.EachGroupPortRet(groupedProfit)
-
-
 
         for name in group_dailyret_dict:
             # 策略回测指标
@@ -826,12 +861,11 @@ class factorModel:
             
         df_bt_indicator = pd.DataFrame(indicator_lst,index = range(len(indicator_lst)),columns=["group","年化收益率","夏普比率","最大回撤"]) # 回测期间分组的回测指标 output
         df_bt_alpha_indicator = pd.DataFrame(alpha_indicator_lst,index=range(len(alpha_indicator_lst)),columns=["group","年化超额收益率","超额最大回撤","calmar"])  # 超额评价指标 new output
-        print(df_bt_indicator)
-
         
         return combinedIC, df_group_net, df_group_alpha, df_bt_indicator, df_bt_alpha_indicator
     
-    def run(self):
-
+    # 辅助函数，用于一次跑单个测试组合
+    def run(self): #docs done
+        #辅助函数，用于跑一次
         Equity_Idx_Monthly_Equity_Returns, Monthly_Equity_Returns, Monthly_Factor_Score, Equity_Idx_Monthly_Factor_Score, Daily_Equity_Returns, benchmark_dailyret = self.getData()
         return self.calculate(Equity_Idx_Monthly_Equity_Returns, Monthly_Equity_Returns, Monthly_Factor_Score, Equity_Idx_Monthly_Factor_Score, Daily_Equity_Returns, benchmark_dailyret)
