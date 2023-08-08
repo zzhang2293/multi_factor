@@ -66,6 +66,9 @@ def collect_data(requests):
             analysisMethod.end = endDateModified 
         if data['benchmark'] != '':
             analysisMethod.benchmark = data['benchmark']
+        if data['factor_weight_mode'] != '':
+            analysisMethod.factorWeightMode = data['factor_weight_mode']
+    
         factor_list = []
         if len(factor) > 0:
             for val in factor:
@@ -73,14 +76,20 @@ def collect_data(requests):
             analysisMethod.factor_name_lst = factor_list
         if len(data['rankLowestFirst']) > 0:
             analysisMethod.rankLowestFirst = data['rankLowestFirst']
-        print(analysisMethod.factor_name_lst)
-        print(analysisMethod.start)
-        print(analysisMethod.end)
-        print(analysisMethod.trade_freq)
-        print(analysisMethod.groupnum)
-        print(analysisMethod.universe_index)
-        print(analysisMethod.rankLowestFirst)
-        print(analysisMethod.benchmark)
+        if len(data['factor_weight']) > 0:
+            analysisMethod.userDefinedFactorWeights = [float(i) for i in data['factor_weight'].split(" ")]
+        print("factor_name_lst: ", analysisMethod.factor_name_lst)
+        print("start: ", analysisMethod.start)
+        print("end: ", analysisMethod.end)
+        print("trade_freq: ", analysisMethod.trade_freq)
+        print("groupnum: ", analysisMethod.groupnum)
+        print("universe_index: ", analysisMethod.universe_index)
+        print("rankLowestFirst: ", analysisMethod.rankLowestFirst)
+        print("benchmark: ", analysisMethod.benchmark)
+        print("category mode: ", analysisMethod.factorWeightMode)
+        print("factor_weight: ", analysisMethod.userDefinedFactorWeights)
+
+        
         combinedIC, df_group_net,df_group_alpha, df_bt_indicator, df_bt_alpha_indicator = analysisMethod.run()
         save_csv(combinedIC, df_group_net, df_bt_indicator, df_bt_alpha_indicator)
         group_data = df_group_net.to_dict()
