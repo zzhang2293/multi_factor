@@ -12,7 +12,7 @@ import warnings
 from collections import defaultdict
 import math
 import numpy as np
-from sklearn.preprocessing import minmax_scale
+from scipy.stats import spearmanr
 
 class factorModel:
 
@@ -20,9 +20,27 @@ class factorModel:
         self.groupnum = 10         # 股票分组数
         self.trade_freq = 'm'      # 交易频率 "m" or "w"b
         self.end = '20230720'      # 因子分析结束日期
-        self.start = '20210420' #hardcode this
-        self.factor_name_lst = ['lpnpQ','revQYOY','hkHoldRatioB','conDaPS20','hkHoldVolChgB20','fundT10NegValuePct',
-                               'upp01M20D','ddp01M20D','voll01M20D','aiDaNp60','udslDWL','udsl','udslUCL']
+        self.start = '20201220' #hardcode this
+        self.factor_name_lst = ['Analyst_factor', 'NegMktValue', 'technology_factor', 'tps_sps', 'momentumn_factor', 
+                                'avgwght_momentum', 'seven_f', 'udslDWL', 'udslUCL', 'udsl', 'aShareholderZ', 'taEntropy', 
+                                'corrVP', 'apbSkew', 'sude', 'sudrev', 'lpnpQ', 'npQYOY', 'npYTDYOY', 'npTTMQOQ', 'npTTMYOY', 
+                                'revQYOY', 'revYTDYOY', 'revTTMQOQ', 'revTTMYOY', 'rrocQ', 'ocfa', 'roeQ', 'roeTTM', 'roeQYOYD', 
+                                'roeTTMQOQD', 'roeTTMYOYD', 'dtop', 'divPaidRatio', 'etopQ', 'stopQ', 'detopQ', 'dstopQD', 'aiSude', 
+                                'conSude', 'aiSudrev', 'conSudrev', 'aiNpYOY', 'aiRevYOY', 'conNpYOY', 'conRevYOY', 'aiEtop', 'aiEtopZ90', 
+                                'aiEtopZ180', 'conDaPE20', 'conDaPE40', 'conDaPE60', 'conDaPS20', 'conDaPS40', 'conDaPS60', 'astDa12Etop', 
+                                'astRankUppct', 'astProfitUppct', 'gsa', 'hkHoldRatioAll', 'hkHoldRatioB', 'hkHoldRatioC', 'fundT10Count', 
+                                'fundT10WeightMean', 'fundT10WeightMax', 'fundT10NegValuePct', 'naiveWeightChgAsym', 'fundT10ChgWeight', 
+                                'fundT10ChgValueRatio', 'pReportDate', 'pReportDiff', 'hkHoldVolChgB20', 'hkHoldVolChgC20', 'hkHoldVolChgAll20',
+                                'hkHoldVolChgB60', 'hkHoldVolChgC60', 'hkHoldVolChgAll60', 'hkHoldVolChgB120', 'hkHoldVolChgC120', 
+                                'hkHoldVolChgAll120', 'aiDaNp30', 'aiDaNp60', 'aiDaNp90', 'aiDaRev30', 'aiDaRev60', 'aiDaRev90', 'aiDaPE30', 
+                                'aiDaPE60', 'aiDaPE90', 'aiDaPS30', 'aiDaPS60', 'aiDaPS90', 'astRptSentiW', 'astRptSentiZ180', 'astRptSentiZ365', 
+                                'astRptSentiZ730', 'sumIPC1Y', 'sumRelatedCorp1Y', 'sumExclPatent1Y', 'sumReviewDays1Y', 'maxRelatedCorp1Y', 'bcvp05M20D', 
+                                'ocvp05M20D', 'corrVPL05M20D', 'upp01M20D', 'ddp01M20D', 'voll01M20D', 'daizhuerjiu', 'FlowerHidInForest', 'rideinboatonwater', 
+                                'caomujiebing', 'decay_panic', 'volatility_enhance_panic', 'primitive_panic', 'flyintofire', 'modify_amplitude', 'month_jump', 
+                                'UTR', 'new_RPV', 'ubl', 'EP_d', 'EPDS', 'TotalMktValue', 'fuzziness_corr', 'fuzziness_amount_r', 'fin_adj_fpdiff', 
+                                'cloudOpenFogDisppear', 'ff3R220', 'ff3SpMom20', 'ff3SpVol20', 'ff3SysMom20', 'ff3SysVol20', 'rmVol20', 'rmVol60', 'rmVol120', 
+                                'trVol20', 'trVol60', 'trVol120', 'trVoV', 'mintvalQua20D', 'mintvalSkew20D', 'mintvalMts20D', 'mintvalMte20D', 'sectvalKurt20D', 
+                                'ovalMbsr20D', 'gmmMean1m20D', 'gmmDmean1m20D']
         
         self.universe_index = ['000852.SH', '000905.SH', '000300.SH', '399303.SZ']
         self.universe = []             # 股票池列表
@@ -35,13 +53,15 @@ class factorModel:
         self.lock = threading.Lock()
         self.stkapi = SelectFromMongo()
 
-        self.factorWeightMode = 'equal'
+        self.factorWeightMode = 'smart'
         self.factorCategories = [1, 1, 2]
         self.EvalPeriod = 31
         self.minEvalPeriod = 4
+        self.factorChoosePeriod = 12
         self.benchmark = '000905.SH'
         self.rankLowestFirst = "0"
         self.userDefinedFactorWeights = []
+        self.nFactors = 10
 
     def getData(self):
 
@@ -363,6 +383,28 @@ class factorModel:
 
         return dateList, ICList
     
+    def chooseFactors(self, IC):
+        if IC.shape[0] > self.factorChoosePeriod:
+            newIC = IC.iloc[-self.factorChoosePeriod:]
+        else:
+            newIC = IC
+
+        mean_map = newIC.apply(lambda x: np.mean(x))
+        abs_mean_map = np.abs(mean_map)
+        asc_correlation_map = newIC.apply(lambda x: spearmanr(x, np.arange(len(x)))[0])
+        desc_correlation_map = newIC.apply(lambda x: spearmanr(x, -np.arange(len(x)))[0])
+
+        asc_correlation_map[mean_map < 0] = 0
+        desc_correlation_map[mean_map > 0] = 0
+
+        total_map = abs_mean_map + asc_correlation_map + desc_correlation_map 
+
+        chosen_factors = total_map.nlargest(IC.shape[1])
+
+        indices = [list(newIC.columns).index(factor) for factor in chosen_factors.index]
+
+        return list(chosen_factors.index), indices                
+
     def calcFactorWeights(self, mode, listOfFactors, listOfCategories = None, HistoricalIC = None, equityScore = None): #docs done
 
         '''
@@ -432,7 +474,7 @@ class factorModel:
                 
             return weight
             
-    def calcEquityScore(self, equityName, weights, scoresMap, month): #docs done
+    def calcEquityScore(self, equityName, weights, scoresMap, month, indices = None): #docs done
 
         '''
             函数: calcEquityScore
@@ -454,7 +496,10 @@ class factorModel:
         if equityName in scoresMap:
             if month in scoresMap[equityName]:
                 #用np.dot 计算两个list的向量内积
-                return (equityName, np.dot(weights, scoresMap[equityName][month]))
+                if not indices:
+                    return (equityName, np.dot(weights, scoresMap[equityName][month]))
+                else:
+                    return (equityName, np.dot(weights, [scoresMap[equityName][month][i] for i in indices]))
             else:
                 #print(f'{equityName} NO FACTOR SCORE DATA for [MONTH {month}]')
                 return (None, None)
@@ -762,17 +807,24 @@ class factorModel:
             ICList.columns = factor_names
         
         #每个月循环计算个股收益
-        for month in range((self.minEvalPeriod if self.factorWeightMode == 'smart' else 0), len(month_names)):
-
+        for month in range((self.minEvalPeriod if self.factorWeightMode == 'smart' else 0), len(month_names)):            
+            
             nameList, scoreList = [], []
+
+            FactorIndices = None
 
             #第一步：计算权重
             if self.factorWeightMode == 'smart':
                 #拿到之前的IC值（不包含当月）
                 currList = ICList.loc[ICList.index[ICList.index < month_names[month]]]
 
+                names, FactorIndices = self.chooseFactors(currList)
+
                 if currList.shape[0] > self.EvalPeriod:
                     currList = currList.iloc[-self.EvalPeriod:]
+                
+                #keep only the names we want
+                currList = currList[currList.columns.intersection(names)]
                     
                 #拿到当月和之前的因子打分（包含当月）
                 res = defaultdict(list)
@@ -782,7 +834,7 @@ class factorModel:
                 else:
                     startMonth = month_names[0]
 
-                for factor in Monthly_Factor_Score: # {factor1 : {month1 : [], month2 : []}}
+                for factor in names: # {factor1 : {month1 : [], month2 : []}}
                     for date in Monthly_Factor_Score[factor]:
                         #print(date, int(date) >= int(startMonth), int(date) <= int(endMonth))
                         if int(date) >= int(startMonth) and int(date) <= int(endMonth):
@@ -793,7 +845,10 @@ class factorModel:
                 res = pd.DataFrame(res)
                 
                 #计算权重
-                factorWeights = self.calcFactorWeights(self.factorWeightMode, factor_names, HistoricalIC =currList, equityScore=res)
+                factorWeights = self.calcFactorWeights(self.factorWeightMode, names, HistoricalIC =currList, equityScore=res)
+                if len(factorWeights) != len(names):
+                    print('factorWeights length not equal to factor_names length!')
+                    continue
             else: #如果不用优化的话，则无需计算IC
                 #全部均权重
                 if self.factorWeightMode == 'equal':
@@ -805,13 +860,13 @@ class factorModel:
                 elif self.factorWeightMode == 'customized':
                     factorWeights = self.userDefinedFactorWeights
             
-            if len(factorWeights) != len(factor_names):
-                print('factorWeights length not equal to factor_names length!')
-                continue
+                if len(factorWeights) != len(factor_names):
+                    print('factorWeights length not equal to factor_names length!')
+                    continue
 
             #有权重以后，我们给每个股票算个分，然后把股票名字和分对应存起来
             for name in stock_names:
-                name, score = self.calcEquityScore(name, factorWeights, Equity_Idx_Monthly_Factor_Score, month_names[month])
+                name, score = self.calcEquityScore(name, factorWeights, Equity_Idx_Monthly_Factor_Score, month_names[month], FactorIndices)
                 if name:
                     nameList.append(name)
                     scoreList.append(score)
@@ -876,5 +931,7 @@ class factorModel:
     # 辅助函数，用于一次跑单个测试组合
     def run(self): #docs done
         #辅助函数，用于跑一次
+        start = time.time()
         Equity_Idx_Monthly_Equity_Returns, Monthly_Equity_Returns, Monthly_Factor_Score, Equity_Idx_Monthly_Factor_Score, Daily_Equity_Returns, benchmark_dailyret = self.getData()
+        print(('Finished collecting data, time = ', time.time() - start))
         return self.calculate(Equity_Idx_Monthly_Equity_Returns, Monthly_Equity_Returns, Monthly_Factor_Score, Equity_Idx_Monthly_Factor_Score, Daily_Equity_Returns, benchmark_dailyret)
