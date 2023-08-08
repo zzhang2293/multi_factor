@@ -14,35 +14,12 @@ import shutil
 
 '''
 
+'''
+get_factor_combination_lst
 
 '''
-        Return Object
 
-        1. Equity_Idx_Monthly_Equity_Returns
-            Type: Dict[list]
-            {Stock1 : {Month1 : return, Month2 : return, etc...}}
-        
-        2. Monthly_Equity_Returns
-            Type: Dict[list]
-            {Month1 : [Stock1Return, Stock2Return, Stock3Return, etc...], Month2 : []...}
 
-        3. Equity_Idx_Monthly_Factor_Score
-            Type: Dict[Dict[list]]
-            {Stock1 : {Month1 : [Stock1Factor1, Stock1Factor2, Stock1Factor3, etc...]}}
-        
-        4. Monthly_Factor_score
-            Type: Dict[Dict[list]]
-            {Factor1 : {Month1 : [Stock1FactorScore, Stock2FactorScore, Stock3FactorScore, etc...], Month2 : []...},}}    
-
-        5. Daily_Equity_Returns
-            Type: pd.DataFrame （这个别改）
-'''
-'''
-            def calculate(self, Equity_Idx_Monthly_Equity_Returns, Monthly_Equity_Returns, 
-            Monthly_Factor_Score, Equity_Idx_Monthly_Factor_Score:dict, 
-            Daily_Equity_Returns, benchmark_dailyret):
-
-'''
 
         
 def get_factor_combination_lst(min:int, max:int, path:str):

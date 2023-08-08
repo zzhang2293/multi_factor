@@ -818,13 +818,13 @@ class factorModel:
                 #拿到之前的IC值（不包含当月）
                 currList = ICList.loc[ICList.index[ICList.index < month_names[month]]]
 
-                names, FactorIndices = self.chooseFactors(currList)
+                #factor_names, FactorIndices = self.chooseFactors(currList)
 
                 if currList.shape[0] > self.EvalPeriod:
                     currList = currList.iloc[-self.EvalPeriod:]
                 
                 #keep only the names we want
-                currList = currList[currList.columns.intersection(names)]
+                currList = currList[currList.columns.intersection(factor_names)]
                     
                 #拿到当月和之前的因子打分（包含当月）
                 res = defaultdict(list)
@@ -834,7 +834,7 @@ class factorModel:
                 else:
                     startMonth = month_names[0]
 
-                for factor in names: # {factor1 : {month1 : [], month2 : []}}
+                for factor in factor_names: # {factor1 : {month1 : [], month2 : []}}
                     for date in Monthly_Factor_Score[factor]:
                         #print(date, int(date) >= int(startMonth), int(date) <= int(endMonth))
                         if int(date) >= int(startMonth) and int(date) <= int(endMonth):
@@ -845,10 +845,7 @@ class factorModel:
                 res = pd.DataFrame(res)
                 
                 #计算权重
-                factorWeights = self.calcFactorWeights(self.factorWeightMode, names, HistoricalIC =currList, equityScore=res)
-                if len(factorWeights) != len(names):
-                    print('factorWeights length not equal to factor_names length!')
-                    continue
+                factorWeights = self.calcFactorWeights(self.factorWeightMode, factor_names, HistoricalIC =currList, equityScore=res)
             else: #如果不用优化的话，则无需计算IC
                 #全部均权重
                 if self.factorWeightMode == 'equal':
@@ -860,9 +857,9 @@ class factorModel:
                 elif self.factorWeightMode == 'customized':
                     factorWeights = self.userDefinedFactorWeights
             
-                if len(factorWeights) != len(factor_names):
-                    print('factorWeights length not equal to factor_names length!')
-                    continue
+            if len(factorWeights) != len(factor_names):
+                print('factorWeights length not equal to factor_names length!')
+                continue
 
             #有权重以后，我们给每个股票算个分，然后把股票名字和分对应存起来
             for name in stock_names:
