@@ -21,26 +21,7 @@ class factorModel:
         self.trade_freq = 'm'      # 交易频率 "m" or "w"b
         self.end = '20230720'      # 因子分析结束日期
         self.start = '20201220' #hardcode this
-        self.factor_name_lst = ['Analyst_factor', 'NegMktValue', 'technology_factor', 'tps_sps', 'momentumn_factor', 
-                                'avgwght_momentum', 'seven_f', 'udslDWL', 'udslUCL', 'udsl', 'aShareholderZ', 'taEntropy', 
-                                'corrVP', 'apbSkew', 'sude', 'sudrev', 'lpnpQ', 'npQYOY', 'npYTDYOY', 'npTTMQOQ', 'npTTMYOY', 
-                                'revQYOY', 'revYTDYOY', 'revTTMQOQ', 'revTTMYOY', 'rrocQ', 'ocfa', 'roeQ', 'roeTTM', 'roeQYOYD', 
-                                'roeTTMQOQD', 'roeTTMYOYD', 'dtop', 'divPaidRatio', 'etopQ', 'stopQ', 'detopQ', 'dstopQD', 'aiSude', 
-                                'conSude', 'aiSudrev', 'conSudrev', 'aiNpYOY', 'aiRevYOY', 'conNpYOY', 'conRevYOY', 'aiEtop', 'aiEtopZ90', 
-                                'aiEtopZ180', 'conDaPE20', 'conDaPE40', 'conDaPE60', 'conDaPS20', 'conDaPS40', 'conDaPS60', 'astDa12Etop', 
-                                'astRankUppct', 'astProfitUppct', 'gsa', 'hkHoldRatioAll', 'hkHoldRatioB', 'hkHoldRatioC', 'fundT10Count', 
-                                'fundT10WeightMean', 'fundT10WeightMax', 'fundT10NegValuePct', 'naiveWeightChgAsym', 'fundT10ChgWeight', 
-                                'fundT10ChgValueRatio', 'pReportDate', 'pReportDiff', 'hkHoldVolChgB20', 'hkHoldVolChgC20', 'hkHoldVolChgAll20',
-                                'hkHoldVolChgB60', 'hkHoldVolChgC60', 'hkHoldVolChgAll60', 'hkHoldVolChgB120', 'hkHoldVolChgC120', 
-                                'hkHoldVolChgAll120', 'aiDaNp30', 'aiDaNp60', 'aiDaNp90', 'aiDaRev30', 'aiDaRev60', 'aiDaRev90', 'aiDaPE30', 
-                                'aiDaPE60', 'aiDaPE90', 'aiDaPS30', 'aiDaPS60', 'aiDaPS90', 'astRptSentiW', 'astRptSentiZ180', 'astRptSentiZ365', 
-                                'astRptSentiZ730', 'sumIPC1Y', 'sumRelatedCorp1Y', 'sumExclPatent1Y', 'sumReviewDays1Y', 'maxRelatedCorp1Y', 'bcvp05M20D', 
-                                'ocvp05M20D', 'corrVPL05M20D', 'upp01M20D', 'ddp01M20D', 'voll01M20D', 'daizhuerjiu', 'FlowerHidInForest', 'rideinboatonwater', 
-                                'caomujiebing', 'decay_panic', 'volatility_enhance_panic', 'primitive_panic', 'flyintofire', 'modify_amplitude', 'month_jump', 
-                                'UTR', 'new_RPV', 'ubl', 'EP_d', 'EPDS', 'TotalMktValue', 'fuzziness_corr', 'fuzziness_amount_r', 'fin_adj_fpdiff', 
-                                'cloudOpenFogDisppear', 'ff3R220', 'ff3SpMom20', 'ff3SpVol20', 'ff3SysMom20', 'ff3SysVol20', 'rmVol20', 'rmVol60', 'rmVol120', 
-                                'trVol20', 'trVol60', 'trVol120', 'trVoV', 'mintvalQua20D', 'mintvalSkew20D', 'mintvalMts20D', 'mintvalMte20D', 'sectvalKurt20D', 
-                                'ovalMbsr20D', 'gmmMean1m20D', 'gmmDmean1m20D']
+        self.factor_name_lst = []
         
         self.universe_index = ['000852.SH', '000905.SH', '000300.SH', '399303.SZ']
         self.universe = []             # 股票池列表
@@ -62,12 +43,16 @@ class factorModel:
         self.rankLowestFirst = "0"
         self.userDefinedFactorWeights = []
 
+        self.factorSelectMode = 'auto' # or manual
         self.factorChoosePeriod = 12
         self.nFactors = 10
 
     def getData(self):
 
         warnings.filterwarnings('ignore')
+
+        if self.factorSelectMode == 'auto':
+            self.factor_name_lst = self.allfactorname_lst
 
         '''
         get_val:
@@ -396,7 +381,7 @@ class factorModel:
         chosen_factors = total_map.nlargest(IC.shape[1])
 
         indices = [list(newIC.columns).index(factor) for factor in chosen_factors.index]
-
+ 
         return list(chosen_factors.index), indices                
 
     def calcFactorWeights(self, mode, listOfFactors, listOfCategories = None, HistoricalIC = None, equityScore = None): #docs done
