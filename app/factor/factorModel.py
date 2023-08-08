@@ -391,15 +391,7 @@ class factorModel:
         else:
             newIC = IC
 
-        mean_map = newIC.apply(lambda x: np.mean(x))
-        abs_mean_map = np.abs(mean_map)
-        asc_correlation_map = newIC.apply(lambda x: spearmanr(x, np.arange(len(x)))[0])
-        desc_correlation_map = newIC.apply(lambda x: spearmanr(x, -np.arange(len(x)))[0])
-
-        asc_correlation_map[mean_map < 0] = 0
-        desc_correlation_map[mean_map > 0] = 0
-
-        total_map = abs_mean_map + asc_correlation_map + desc_correlation_map 
+        total_map = newIC.sum().abs()
 
         chosen_factors = total_map.nlargest(IC.shape[1])
 
