@@ -78,6 +78,12 @@ def collect_data(requests):
             analysisMethod.rankLowestFirst = data['rankLowestFirst']
         if len(data['factor_weight']) > 0:
             analysisMethod.userDefinedFactorWeights = [float(i) for i in data['factor_weight'].split(" ")]
+        if data['EvalPeriod'] != '':
+            analysisMethod.EvalPeriod = int(data['EvalPeriod'])
+        if data['minEvalPeriod'] != '':
+            analysisMethod.minEvalPeriod = int(data['minEvalPeriod'])
+        if data['stockWeightMode'] != '':
+            analysisMethod.stockWeightMode = data['stockWeightMode']
         print("factor_name_lst: ", analysisMethod.factor_name_lst)
         print("start: ", analysisMethod.start)
         print("end: ", analysisMethod.end)
@@ -88,6 +94,9 @@ def collect_data(requests):
         print("benchmark: ", analysisMethod.benchmark)
         print("category mode: ", analysisMethod.factorWeightMode)
         print("factor_weight: ", analysisMethod.userDefinedFactorWeights)
+        print('EvalPeriod', analysisMethod.EvalPeriod)
+        print('minEvalPeriod', analysisMethod.minEvalPeriod)
+        print('stockWeightMode', analysisMethod.stockWeightMode)
 
         
         combinedIC, df_group_net,df_group_alpha, df_bt_indicator, df_bt_alpha_indicator = analysisMethod.run()

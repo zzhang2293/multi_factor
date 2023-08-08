@@ -45,7 +45,19 @@
           <el-date-picker type="date" placeholder="选择日期" v-model="form.endDate"></el-date-picker>
         </el-col>
       </el-form-item>
-      <el-form-item label="选择权重方式">
+      <el-form-item label="优化最长周期（若不是智能模式则跳过，要求整数月份）">
+        <el-input v-model="form.EvalPeriod"></el-input>
+      </el-form-item>
+      <el-form-item label="优化最短周期（若不是智能模式则跳过，要求整数月份）">
+        <el-input v-model="form.minEvalPeriod"></el-input>
+      </el-form-item>
+      <el-form-item label="个股权重方式">
+        <el-select v-model="form.stockWeightMode" placeholder="请选择排序方式">
+          <el-option label="等权" value="equal"></el-option>
+          <el-option label="智能" value="smart"></el-option>
+        </el-select>
+      </el-form-item>
+      <el-form-item label="因子权重方式">
         <el-select v-model="form.factor_weight_mode" placeholder="请选择排序方式">
           <el-option label="等权" value="equal"></el-option>
           <el-option label="智能" value="smart"></el-option>
@@ -167,7 +179,10 @@
             benchmark: '',
             factor_category : [],
             factor_weight: "",
-            factor_weight_mode: ""
+            factor_weight_mode: "",
+            EvalPeriod: "",
+            minEvalPeriod: "",
+            stockWeightMode: ""
           },
           search: "",
           imageSrc: "",
