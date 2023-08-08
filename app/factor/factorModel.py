@@ -54,13 +54,15 @@ class factorModel:
         self.stkapi = SelectFromMongo()
 
         self.factorWeightMode = 'smart'
+        self.stockWeightMode = 'equal'
         self.factorCategories = [1, 1, 2]
         self.EvalPeriod = 31
         self.minEvalPeriod = 4
-        self.factorChoosePeriod = 12
         self.benchmark = '000905.SH'
         self.rankLowestFirst = "0"
         self.userDefinedFactorWeights = []
+
+        self.factorChoosePeriod = 12
         self.nFactors = 10
 
     def getData(self):
@@ -553,7 +555,10 @@ class factorModel:
             - list[float], 个股权重
         '''
         #（现阶段暂包含未计算，权当等权）
-        return [1/len(equityBasket)] * len(equityBasket)
+        if self.stockWeightMode == 'equal':
+            return [1/len(equityBasket)] * len(equityBasket)
+        elif self.stockWeightMode == 'smart':
+            raise Exception('Smart Weight Mode Not Implemented')
 
     # 计算持有期每组的组合收益率
     def EachGroupPortRet(self,all_period_data):
