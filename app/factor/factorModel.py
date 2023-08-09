@@ -13,6 +13,7 @@ from collections import defaultdict
 import math
 import numpy as np
 from scipy.stats import spearmanr
+from app.factor.PortfolioOptimization import PortfolioOpt
 
 class factorModel:
 
@@ -46,7 +47,8 @@ class factorModel:
         self.factorSelectMode = 'auto' # 因子选择模式
         self.factorChoosePeriod = 12 # 因子选择优化回看周期
         self.nFactors = 10 #选前n个因子
-
+        self.equityGroups = dict(list(list(str))) # 按调仓日分组股票名
+        
     def getData(self):
 
         warnings.filterwarnings('ignore')
@@ -526,7 +528,7 @@ class factorModel:
         # #return a list of list of equities
         return [list(group) for group in groups]
     
-    def calcBasketWeights(self, equityBasket): #docs done
+    def calcBasketWeights(self, equityBasket:list, pre_bt_tradedate:str): #docs done
             
         '''
             函数: calcBasketWeights
@@ -534,15 +536,21 @@ class factorModel:
             1) 摘要: 此函数用于对单组内个股的权重计算
             2) 函数输入
             - equityBasket [必须]
-                组内股票名称 (list[str])
+                组内股票名称 (list[list[str]])
             3) 输出: 
             - list[float], 个股权重
         '''
         #（现阶段暂包含未计算，权当等权）
         if self.stockWeightMode == 'equal':
-            return [1/len(equityBasket)] * len(equityBasket)
+            res = dict()
+            len_stk = len*equityBasket[0]
+            for stk in equityBasket[0]:
+                res[stk] = 1/len_stk
+            return res
         elif self.stockWeightMode == 'smart':
-            raise Exception('Smart Weight Mode Not Implemented')
+            stk_weight_opt = PortfolioOpt(pre_bt_tradedate, target_list=equityBasket[0], remain_list=equityBasket[1:], api_obj=self.factor_api)
+            return stk_weight_opt.PortOptWeight()
+            
 
     # 计算持有期每组的组合收益率
     def EachGroupPortRet(self,all_period_data):
@@ -570,8 +578,11 @@ class factorModel:
             if not cur_each_period: continue
 
             for group_name, cur_temp_df in cur_each_period.items():
-                result_df = cur_temp_df.groupby('trade_date')['profit_daily'].mean().reset_index(name='dailyRet')
-
+                if self.stockWeightMode == 'equal':
+                    result_df = cur_temp_df.groupby('trade_date')['profit_daily'].mean().reset_index(name='dailyRet')
+                else:
+                    result_df = self.CalcStkWeight(cur_temp_df=cur_temp_df, current_tradedate=trade_day, pre_tradedate=self.pre_bt_tradedate[idx])
+                    
                 if next_each_period:
                     next_temp_df = next_each_period.get(group_name, pd.DataFrame())
                     cur_hold = set(cur_temp_df['ts_code'])
@@ -611,6 +622,37 @@ class factorModel:
 
         return eachgroup_show
 
+            # dict - groupedProfit
+            #     {month1 : {group1:df, group2:df, group3:df}}
+            #     每个df有三个col, 叫ts_code(股票代码) profit(日收益) trade_date(交易日)
+    def CalcStkWeight(self, cur_temp_df:pd.DataFrame, current_tradedate:str, pre_tradedate:str):
+        stk_weight_opt = PortfolioOpt(pre_trade_date=pre_tradedate, 
+                                      target_list=self.equityGroups[current_tradedate][0], 
+                                      remain_list=self.equityGroups[current_tradedate][1:], 
+                                      api_obj=self.factor_api)
+        stk_weight_df = stk_weight_opt.PortOptWeight()
+        res_return = 0
+        res_weight = {}
+        for row in cur_temp_df.itertuples():
+            stk_daily = getattr(row, "profit")
+            stk_code = getattr(row, "ts_code")
+            stk_profit = getattr(row, "profit")
+            if stk_daily not in res_weight:
+                res_weight[stk_daily] = 0
+                res_weight[stk_daily] += stk_profit * stk_weight_df[stk_code]
+            else:
+                res_weight[stk_daily] += stk_profit * stk_weight_df[stk_code]
+        res_weight_df = pd.DataFrame(res_weight).reset_index(names='dailyRet')
+        return res_weight_df
+
+            
+        
+        
+
+
+
+
+
     # 历史累计收益率序列和策略评价指标
     def HistoryAccuRetAndIndicator(self,group_name,eachgroup_dailyret):
         '''
@@ -618,6 +660,7 @@ class factorModel:
         :param eachgroup_dailyret: DataFrame trade_date dailyRet
         :return: temp_df DataFrame 行索引为交易日（升序），唯一列为累计净值 ； indicator_lst [] 依次为年化收益率、夏普比率、最大回撤
         '''
+
         temp_df = eachgroup_dailyret.copy()
         temp_df.sort_values(by="trade_date",ascending=True,inplace=True)  # DataFrame trade_date dailyRet
         temp_df.reset_index(drop=True,inplace=True)
@@ -858,7 +901,7 @@ class factorModel:
                     scoreList.append(score)
             
             #根据分数给股票分成n组
-            equityGroups = self.rankEquity(nameList, scoreList)
+            self.equityGroups[month_names[month]] = self.rankEquity(nameList, scoreList)
             
             #变化数据结构，方便后面计算 
             '''

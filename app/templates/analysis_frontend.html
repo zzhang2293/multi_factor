@@ -265,6 +265,7 @@
           this.smart_mode_meta_visible = true;
         },
         onSubmit() {
+          // 变成json格式
           let json_form = JSON.stringify(this.form);
           this.form.buttonType = "warning";
           _this = this;
@@ -273,16 +274,17 @@
             url: "collect_data/",
             data: json_form
           }).then(function (resp) {
+            // 将所有隐藏的table显示出来
             _this.imageVisible = true
             tabledata_show = []
             alpha_tabledata_show = []
-
+            // 四个值
             indicator = Object.values(resp.data.indicator)
             indicator_alpha = Object.values(resp.data.indicator_alpha)
             groups_trans = Object.values(resp.data.group)
             groups_alpha = Object.values(resp.data.group_alpha)
             indicator.forEach((val, index) => {
-
+              // 将发送回来的数据打包成list of dict 显示到table里
               tabledata_show.push({
                 group: val.group,
                 year_rate: val.year_rate,
@@ -290,7 +292,7 @@
                 max: val.max
               })
             })
-
+            // 同上
             indicator_alpha.forEach((val, index) => {
 
               alpha_tabledata_show.push({
@@ -301,12 +303,14 @@
 
               })
             })
+            // 将打包完的数据绑到模型上
             _this.tableData = tabledata_show
             _this.tableData_alpha = alpha_tabledata_show
-            /////////////////////////////////////////////////////////////////////////////////////////
+
             const data_series = [];
             const alpha_data_series = [];
             const dateList = Object.values(groups_trans[groups_trans.length - 1])
+            // 处理日期数据
             const formattedDates = dateList.map(dateStr => {
               const year = parseInt(dateStr.substring(0, 4));
               const month = parseInt(dateStr.substring(4, 6)) - 1;
@@ -315,6 +319,7 @@
 
               return Date.UTC(year, month, day);
             });
+            
             for (let i = 0; i < groups_alpha.length - 1; i++) {
               each_group = []
               const vals = Object.values(groups_alpha[i]);
