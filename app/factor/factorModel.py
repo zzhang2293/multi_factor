@@ -37,14 +37,14 @@ class factorModel:
 
         self.factorWeightMode = 'smart'  #选因子权重的模式
         self.stockWeightMode = 'equal'   #选个股权重的模式
-        self.factorCategories = [] 
+        self.factorCategories = [] #人工给因子分组的话会存在这里
         self.EvalPeriod = 31 # 因子权重优化最长回看周期
         self.minEvalPeriod = 4 # 因子权重优化最短回看周期
         self.benchmark = '000905.SH' # 对比标的
         self.rankLowestFirst = "0" #升序还是倒序，0为升序
         self.userDefinedFactorWeights = [] #用户自定义因子权重存在这里
 
-        self.factorSelectMode = 'auto' # 因子选择模式
+        self.factorSelectMode = 'manual' # 因子选择模式
         self.factorChoosePeriod = 12 # 因子选择优化回看周期
         self.nFactors = 10 #选前n个因子
         self.equityGroups = dict(list(list(str))) # 按调仓日分组股票名
@@ -749,6 +749,25 @@ class factorModel:
    
        # 拿回去期间基准指数的日涨跌幅数据
 
+    def find_factor_corr_heatmap(self, Monthly_Factor_Score):
+        res = defaultdict(list)
+
+        for i in Monthly_Factor_Score.keys():
+            for j in Monthly_Factor_Score[i].keys():
+                res[i] += Monthly_Factor_Score[i][j]
+
+        check = defaultdict(int)
+        for i in res.keys():
+            check[len(res[i])] += 1
+        if len(check) != 1:
+            print('不同因子数量不同，请检查数据')
+            print(check)
+            return
+        
+        df = pd.DataFrame(res)
+        data = df.corr()
+        return data
+
     # 辅助函数，用于一次跑多个测试组合
     def calculate(self, Equity_Idx_Monthly_Equity_Returns, Monthly_Equity_Returns, Monthly_Factor_Score, Equity_Idx_Monthly_Factor_Score:dict, Daily_Equity_Returns, benchmark_dailyret): #docs done
 
@@ -850,7 +869,8 @@ class factorModel:
                 #拿到之前的IC值（不包含当月）
                 currList = ICList.loc[ICList.index[ICList.index < month_names[month]]]
 
-                factor_names, FactorIndices = self.chooseFactors(currList)
+                if self.factorSelectMode == 'auto':
+                    factor_names, FactorIndices = self.chooseFactors(currList)
 
                 if currList.shape[0] > self.EvalPeriod:
                     currList = currList.iloc[-self.EvalPeriod:]
@@ -895,7 +915,10 @@ class factorModel:
 
             #有权重以后，我们给每个股票算个分，然后把股票名字和分对应存起来
             for name in stock_names:
-                name, score = self.calcEquityScore(name, factorWeights, Equity_Idx_Monthly_Factor_Score, month_names[month], FactorIndices)
+                if self.factorSelectMode == 'auto':
+                    name, score = self.calcEquityScore(name, factorWeights, Equity_Idx_Monthly_Factor_Score, month_names[month], FactorIndices)
+                else:
+                    name, score = self.calcEquityScore(name, factorWeights, Equity_Idx_Monthly_Factor_Score, month_names[month])
                 if name:
                     nameList.append(name)
                     scoreList.append(score)
@@ -954,6 +977,10 @@ class factorModel:
             
         df_bt_indicator = pd.DataFrame(indicator_lst,index = range(len(indicator_lst)),columns=["group","年化收益率","夏普比率","最大回撤"]) # 回测期间分组的回测指标 output
         df_bt_alpha_indicator = pd.DataFrame(alpha_indicator_lst,index=range(len(alpha_indicator_lst)),columns=["group","年化超额收益率","超额最大回撤","calmar"])  # 超额评价指标 new output
+
+        factor_corr_df = self.find_factor_corr_heatmap(Monthly_Factor_Score)
+        factor_corr_df.to_csv('csv_result/factor_corr.csv')
+        
         
         return combinedIC, df_group_net, df_group_alpha, df_bt_indicator, df_bt_alpha_indicator
     
