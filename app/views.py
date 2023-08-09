@@ -84,6 +84,12 @@ def collect_data(requests):
             analysisMethod.minEvalPeriod = int(data['minEvalPeriod'])
         if data['stockWeightMode'] != '':
             analysisMethod.stockWeightMode = data['stockWeightMode']
+        if data['factorSelectMode'] != '':
+            analysisMethod.factorSelectMode = data['factorSelectMode']
+        if data['factorChoosePeriod'] != '':
+            analysisMethod.factorChoosePeriod = data['factorChoosePeriod']
+        if data['nFactors'] != '':
+            analysisMethod.nFactors = data['nFactors']
         print("factor_name_lst: ", analysisMethod.factor_name_lst)
         print("start: ", analysisMethod.start)
         print("end: ", analysisMethod.end)
@@ -97,6 +103,9 @@ def collect_data(requests):
         print('EvalPeriod', analysisMethod.EvalPeriod)
         print('minEvalPeriod', analysisMethod.minEvalPeriod)
         print('stockWeightMode', analysisMethod.stockWeightMode)
+        print('factorSelectMode: ', analysisMethod.factorSelectMode)
+        print('nFactors: ', analysisMethod.nFactors)
+        print('factorChoosePeriod: ', analysisMethod.factorChoosePeriod)
 
         
         combinedIC, df_group_net,df_group_alpha, df_bt_indicator, df_bt_alpha_indicator = analysisMethod.run()
