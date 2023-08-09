@@ -34,18 +34,18 @@ class factorModel:
         self.lock = threading.Lock()
         self.stkapi = SelectFromMongo()
 
-        self.factorWeightMode = 'smart'
-        self.stockWeightMode = 'equal'
-        self.factorCategories = [1, 1, 2]
-        self.EvalPeriod = 31
-        self.minEvalPeriod = 4
-        self.benchmark = '000905.SH'
-        self.rankLowestFirst = "0"
-        self.userDefinedFactorWeights = []
+        self.factorWeightMode = 'smart'  #选因子权重的模式
+        self.stockWeightMode = 'equal'   #选个股权重的模式
+        self.factorCategories = [] 
+        self.EvalPeriod = 31 # 因子权重优化最长回看周期
+        self.minEvalPeriod = 4 # 因子权重优化最短回看周期
+        self.benchmark = '000905.SH' # 对比标的
+        self.rankLowestFirst = "0" #升序还是倒序，0为升序
+        self.userDefinedFactorWeights = [] #用户自定义因子权重存在这里
 
-        self.factorSelectMode = 'auto' # or manual
-        self.factorChoosePeriod = 12
-        self.nFactors = 10
+        self.factorSelectMode = 'auto' # 因子选择模式
+        self.factorChoosePeriod = 12 # 因子选择优化回看周期
+        self.nFactors = 10 #选前n个因子
 
     def getData(self):
 
@@ -376,13 +376,20 @@ class factorModel:
         else:
             newIC = IC
 
+        
+
         total_map = newIC.sum().abs()
 
-        chosen_factors = total_map.nlargest(IC.shape[1])
+        print(newIC, total_map)
 
-        indices = [list(newIC.columns).index(factor) for factor in chosen_factors.index]
+        while True:
+            pass
+
+        # chosen_factors = total_map.nlargest(IC.shape[1])
+
+        # indices = [list(newIC.columns).index(factor) for factor in chosen_factors.index]
  
-        return list(chosen_factors.index), indices                
+        # return list(chosen_factors.index), indices                
 
     def calcFactorWeights(self, mode, listOfFactors, listOfCategories = None, HistoricalIC = None, equityScore = None): #docs done
 
@@ -800,7 +807,7 @@ class factorModel:
                 #拿到之前的IC值（不包含当月）
                 currList = ICList.loc[ICList.index[ICList.index < month_names[month]]]
 
-                #factor_names, FactorIndices = self.chooseFactors(currList)
+                factor_names, FactorIndices = self.chooseFactors(currList)
 
                 if currList.shape[0] > self.EvalPeriod:
                     currList = currList.iloc[-self.EvalPeriod:]
