@@ -580,7 +580,7 @@ class factorModel:
             for group_name, cur_temp_df in cur_each_period.items():
                 if self.stockWeightMode == 'equal':
                     result_df = cur_temp_df.groupby('trade_date')['profit_daily'].mean().reset_index(name='dailyRet')
-                else:
+                elif self.stockWeightMode == 'smart':
                     result_df = self.CalcStkWeight(cur_temp_df=cur_temp_df, current_tradedate=trade_day, pre_tradedate=self.pre_bt_tradedate[idx])
                     
                 if next_each_period:
@@ -644,14 +644,6 @@ class factorModel:
                 res_weight[stk_daily] += stk_profit * stk_weight_df[stk_code]
         res_weight_df = pd.DataFrame(res_weight).reset_index(names='dailyRet')
         return res_weight_df
-
-            
-        
-        
-
-
-
-
 
     # 历史累计收益率序列和策略评价指标
     def HistoryAccuRetAndIndicator(self,group_name,eachgroup_dailyret):
