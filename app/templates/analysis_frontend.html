@@ -591,6 +591,23 @@
             URL.revokeObjectURL(url);
 
           })
+        },
+        download_factor_zip() {
+          axios({
+            method: 'get',
+            url: 'download_factor_zip/',
+            data: "",
+            responseType: 'blob'
+          }).then(function (resp) {
+            const blob = new Blob([resp.data], { type: 'application/zip' });
+            let url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = "factor_corr.ZIP";
+            link.click()
+            URL.revokeObjectURL(url);
+
+          })
         }
 
       },
