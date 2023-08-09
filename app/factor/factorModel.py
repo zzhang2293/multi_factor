@@ -47,7 +47,7 @@ class factorModel:
         self.factorSelectMode = 'manual' # 因子选择模式
         self.factorChoosePeriod = 12 # 因子选择优化回看周期
         self.nFactors = 10 #选前n个因子
-        self.equityGroups = dict(list(list(str))) # 按调仓日分组股票名
+        self.equityGroupsInfo = dict(list(list(str))) # 按调仓日分组股票名
         
     def getData(self):
 
@@ -627,8 +627,8 @@ class factorModel:
             #     每个df有三个col, 叫ts_code(股票代码) profit(日收益) trade_date(交易日)
     def CalcStkWeight(self, cur_temp_df:pd.DataFrame, current_tradedate:str, pre_tradedate:str):
         stk_weight_opt = PortfolioOpt(pre_trade_date=pre_tradedate, 
-                                      target_list=self.equityGroups[current_tradedate][0], 
-                                      remain_list=self.equityGroups[current_tradedate][1:], 
+                                      target_list=self.equityGroupsInfo[current_tradedate][0], 
+                                      remain_list=self.equityGroupsInfo[current_tradedate][1:], 
                                       api_obj=self.factor_api)
         stk_weight_df = stk_weight_opt.PortOptWeight()
         res_return = 0
@@ -924,7 +924,8 @@ class factorModel:
                     scoreList.append(score)
             
             #根据分数给股票分成n组
-            self.equityGroups[month_names[month]] = self.rankEquity(nameList, scoreList)
+            self.equityGroupsInfo[month_names[month]] = self.rankEquity(nameList, scoreList)
+            equityGroups = self.rankEquity(nameList, scoreList)
             
             #变化数据结构，方便后面计算 
             '''
