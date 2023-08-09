@@ -807,7 +807,8 @@ class factorModel:
                 #拿到之前的IC值（不包含当月）
                 currList = ICList.loc[ICList.index[ICList.index < month_names[month]]]
 
-                factor_names, FactorIndices = self.chooseFactors(currList)
+                if self.factorSelectMode == 'auto':
+                    factor_names, FactorIndices = self.chooseFactors(currList)
 
                 if currList.shape[0] > self.EvalPeriod:
                     currList = currList.iloc[-self.EvalPeriod:]
@@ -852,7 +853,10 @@ class factorModel:
 
             #有权重以后，我们给每个股票算个分，然后把股票名字和分对应存起来
             for name in stock_names:
-                name, score = self.calcEquityScore(name, factorWeights, Equity_Idx_Monthly_Factor_Score, month_names[month], FactorIndices)
+                if self.factorSelectMode == 'auto':
+                    name, score = self.calcEquityScore(name, factorWeights, Equity_Idx_Monthly_Factor_Score, month_names[month], FactorIndices)
+                else:
+                    name, score = self.calcEquityScore(name, factorWeights, Equity_Idx_Monthly_Factor_Score, month_names[month])
                 if name:
                     nameList.append(name)
                     scoreList.append(score)
