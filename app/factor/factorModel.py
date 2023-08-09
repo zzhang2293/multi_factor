@@ -36,7 +36,7 @@ class factorModel:
 
         self.factorWeightMode = 'smart'  #选因子权重的模式
         self.stockWeightMode = 'equal'   #选个股权重的模式
-        self.factorCategories = [] 
+        self.factorCategories = [] #人工给因子分组的话会存在这里
         self.EvalPeriod = 31 # 因子权重优化最长回看周期
         self.minEvalPeriod = 4 # 因子权重优化最短回看周期
         self.benchmark = '000905.SH' # 对比标的
