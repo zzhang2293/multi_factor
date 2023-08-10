@@ -20,7 +20,7 @@ class factorModel:
     def __init__(self):
         self.groupnum = 10         # 股票分组数
         self.trade_freq = 'm'      # 交易频率 "m" or "w"b
-        self.end = '20230720'      # 因子分析结束日期
+        self.end = '20230809'      # 因子分析结束日期
         self.start = '20201220' #hardcode this
         self.factor_name_lst = []
         
@@ -624,14 +624,24 @@ class factorModel:
             #     每个df有三个col, 叫ts_code(股票代码) profit(日收益) trade_date(交易日)
 
     def CalcStkWeight(self, cur_temp_df:pd.DataFrame, current_tradedate:str, pre_tradedate:str):
+        
+
         res_group_info = [item for sub_lst in self.equityGroupsInfo[current_tradedate][1:] for item in sub_lst]
+
+        target = self.equityGroupsInfo[current_tradedate][0]
+        if len(target) > 300:
+            res_group_info = target[300:] + res_group_info
+            target = target[:300]
         
         stk_weight_opt = PortfolioOpt(pre_trade_date=pre_tradedate, 
-                                      target_list=self.equityGroupsInfo[current_tradedate][0], 
+                                      target_list=target, 
                                       remain_list=res_group_info,#貌似是个list of list 所以加个[0] idk why
                                       api_obj=self.stkapi)
         
         stk_weight_df = stk_weight_opt.PortOptWeight()
+        self.weightTemp = stk_weight_df
+
+        
         res_return = defaultdict(lambda: 0)
         #res_weight = {}
         #stk weight df长度有可能和targetlist不一样，按照这个决定第一组
@@ -962,6 +972,10 @@ class factorModel:
         alpha_indicator_lst = []          # 回测期间分组的alpha回测指标
         groupedProfit[list(groupedProfit.keys())[-1]]['group_0'].to_csv('best_stk.csv')
         group_dailyret_dict = self.EachGroupPortRet(groupedProfit)
+
+        with open("nameToScore.txt", 'w') as f: 
+            for name, score in zip(nameList, scoreList): 
+                f.write('%s:%s\n' % (name, score))
 
         print(f'Profit Calc Complete, Time Elapsed: {time.time() - curr}')
         curr = time.time()
