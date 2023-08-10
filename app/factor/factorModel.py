@@ -630,7 +630,7 @@ class factorModel:
                                       remain_list=self.equityGroupsInfo[current_tradedate][1:][0],#貌似是个list of list 所以加个[0] idk why
                                       api_obj=self.stkapi)
         stk_weight_df = stk_weight_opt.PortOptWeight()
-        res_return = defaultdict()
+        res_return = defaultdict(lambda: 0)
         #res_weight = {}
         #stk weight df长度有可能和targetlist不一样，按照这个决定第一组
         print(stk_weight_df, len(stk_weight_df), len(stk_weight_opt.target_list))
