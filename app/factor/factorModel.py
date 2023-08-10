@@ -35,7 +35,7 @@ class factorModel:
         self.lock = threading.Lock()
         self.stkapi = SelectFromMongo()
 
-        self.factorWeightMode = 'smart'  #选因子权重的模式
+        self.factorWeightMode = 'equal'  #选因子权重的模式
         self.stockWeightMode = 'equal'   #选个股权重的模式
         self.factorCategories = [] #人工给因子分组的话会存在这里
         self.EvalPeriod = 31 # 因子权重优化最长回看周期
@@ -636,31 +636,17 @@ class factorModel:
         res_return = defaultdict(lambda: 0)
         #res_weight = {}
         #stk weight df长度有可能和targetlist不一样，按照这个决定第一组
-        print(stk_weight_df, len(stk_weight_df), len(stk_weight_opt.target_list))
+        #print(stk_weight_df, len(stk_weight_df), len(stk_weight_opt.target_list))
         for row in cur_temp_df.itertuples():
             date = getattr(row, "trade_date")
             ticker = getattr(row, "ts_code")
             profit = getattr(row, "profit_daily")
             if ticker in stk_weight_df:
                 res_return[date] += profit * stk_weight_df[ticker]
+
+        df = pd.DataFrame(list(res_return.items()), columns=['trade_date', 'dailyRet'])
         
-        df = pd.DataFrame(res_return).reset_index(names='dailyRet')
-        print(df)
-        
-        while True:
-            pass
-        for row in cur_temp_df.itertuples():
-            stk_daily = getattr(row, "trade_date")
-            stk_code = getattr(row, "ts_code")
-            stk_profit = getattr(row, "profit_daily")
-            if stk_code in stk_weight_df:
-                res_weight[stk_daily] = 0
-                res_weight[stk_daily] += stk_profit * stk_weight_df[stk_code]
-            else:
-                res_weight[stk_daily] += stk_profit * stk_weight_df[stk_code]
-    
-        res_weight_df = pd.DataFrame(res_weight).reset_index(names='dailyRet')
-        return res_weight_df
+        return df
 
     # 历史累计收益率序列和策略评价指标
     def HistoryAccuRetAndIndicator(self,group_name,eachgroup_dailyret):
