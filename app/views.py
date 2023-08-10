@@ -167,9 +167,6 @@ def collect_data(requests):
 def get_csv_output(request):
     return FileResponse(open('csv_result/packed_files.ZIP', 'rb'), as_attachment=True, filename="packed_files.zip")
 
-def get_factor_csv_output(request):
-    return FileResponse(open('csv_result/factor_corr.ZIP', 'rb'), as_attachment=True, filename="factor_corr.zip")
-
 def save_csv(combinedIC, df_group_net, df_bt_indicator, df_bt_alpha_indicator):
     IC_Dataframe = pd.DataFrame(combinedIC)
     if not os.path.exists('csv_result'):
@@ -183,5 +180,4 @@ def save_csv(combinedIC, df_group_net, df_bt_indicator, df_bt_alpha_indicator):
         zipped.write('csv_result/grouped_month_ret.csv')
         zipped.write('csv_result/indicator.csv')
         zipped.write('csv_result/alpha_indicator.csv')
-    with zipfile.ZipFile('csv_result/factor_corr.ZIP', 'w') as zipped:
         zipped.write('csv_result/factor_corr.csv')
