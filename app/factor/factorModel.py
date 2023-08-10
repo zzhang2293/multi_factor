@@ -378,8 +378,6 @@ class factorModel:
         else:
             newIC = IC
 
-        
-
         total_map = newIC.sum().abs()
 
         print(newIC, total_map)
@@ -551,7 +549,6 @@ class factorModel:
             stk_weight_opt = PortfolioOpt(pre_bt_tradedate, target_list=equityBasket[0], remain_list=equityBasket[1:], api_obj=self.factor_api)
             return stk_weight_opt.PortOptWeight()
             
-
     # 计算持有期每组的组合收益率
     def EachGroupPortRet(self,all_period_data):
         '''
@@ -620,10 +617,12 @@ class factorModel:
             eachgroup_show[key] = df_value
 
         return eachgroup_show
+    
 
             # dict - groupedProfit
             #     {month1 : {group1:df, group2:df, group3:df}}
             #     每个df有三个col, 叫ts_code(股票代码) profit(日收益) trade_date(交易日)
+
     def CalcStkWeight(self, cur_temp_df:pd.DataFrame, current_tradedate:str, pre_tradedate:str):
         res_group_info = [item for sub_lst in self.equityGroupsInfo[current_tradedate][1:] for item in sub_lst]
         
@@ -856,7 +855,7 @@ class factorModel:
 
         #如果要优化，则需要计算各因子IC
         #优化模式下 权重每个月都不一样，会在下面的循环中计算，这里只是计算IC
-        if self.factorWeightMode == 'smart':
+        if self.factorWeightMode == 'smart' or self.factorSelectMode == 'auto':
             
             ICList = []
 
@@ -877,13 +876,14 @@ class factorModel:
 
             FactorIndices = None
 
+            currList = ICList.loc[ICList.index[ICList.index < month_names[month]]]
+
+            if self.factorSelectMode == 'auto':
+                factor_names, FactorIndices = self.chooseFactors(currList)
+
             #第一步：计算权重
             if self.factorWeightMode == 'smart':
                 #拿到之前的IC值（不包含当月）
-                currList = ICList.loc[ICList.index[ICList.index < month_names[month]]]
-
-                if self.factorSelectMode == 'auto':
-                    factor_names, FactorIndices = self.chooseFactors(currList)
 
                 if currList.shape[0] > self.EvalPeriod:
                     currList = currList.iloc[-self.EvalPeriod:]
