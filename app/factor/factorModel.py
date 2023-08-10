@@ -47,7 +47,7 @@ class factorModel:
         self.factorSelectMode = 'manual' # 因子选择模式
         self.factorChoosePeriod = 12 # 因子选择优化回看周期
         self.nFactors = 10 #选前n个因子
-        self.equityGroupsInfo = dict(list(list(str))) # 按调仓日分组股票名
+        self.equityGroupsInfo = dict() # 按调仓日分组股票名
         
     def getData(self):
 
@@ -578,11 +578,10 @@ class factorModel:
             if not cur_each_period: continue
 
             for group_name, cur_temp_df in cur_each_period.items():
-                if self.stockWeightMode == 'equal':
-                    result_df = cur_temp_df.groupby('trade_date')['profit_daily'].mean().reset_index(name='dailyRet')
-                elif self.stockWeightMode == 'smart':
+                if self.stockWeightMode == 'smart' and group_name == 'group_0':
                     result_df = self.CalcStkWeight(cur_temp_df=cur_temp_df, current_tradedate=trade_day, pre_tradedate=self.pre_bt_tradedate[idx])
-                    
+                else:
+                    result_df = cur_temp_df.groupby('trade_date')['profit_daily'].mean().reset_index(name='dailyRet')
                 if next_each_period:
                     next_temp_df = next_each_period.get(group_name, pd.DataFrame())
                     cur_hold = set(cur_temp_df['ts_code'])
@@ -628,20 +627,35 @@ class factorModel:
     def CalcStkWeight(self, cur_temp_df:pd.DataFrame, current_tradedate:str, pre_tradedate:str):
         stk_weight_opt = PortfolioOpt(pre_trade_date=pre_tradedate, 
                                       target_list=self.equityGroupsInfo[current_tradedate][0], 
-                                      remain_list=self.equityGroupsInfo[current_tradedate][1:], 
-                                      api_obj=self.factor_api)
+                                      remain_list=self.equityGroupsInfo[current_tradedate][1:][0],#貌似是个list of list 所以加个[0] idk why
+                                      api_obj=self.stkapi)
         stk_weight_df = stk_weight_opt.PortOptWeight()
-        res_return = 0
-        res_weight = {}
+        res_return = defaultdict()
+        #res_weight = {}
+        #stk weight df长度有可能和targetlist不一样，按照这个决定第一组
+        print(stk_weight_df, len(stk_weight_df), len(stk_weight_opt.target_list))
         for row in cur_temp_df.itertuples():
-            stk_daily = getattr(row, "profit")
+            date = getattr(row, "trade_date")
+            ticker = getattr(row, "ts_code")
+            profit = getattr(row, "profit_daily")
+            if ticker in stk_weight_df:
+                res_return[date] += profit * stk_weight_df[ticker]
+        
+        df = pd.DataFrame(res_return).reset_index(names='dailyRet')
+        print(df)
+        
+        while True:
+            pass
+        for row in cur_temp_df.itertuples():
+            stk_daily = getattr(row, "trade_date")
             stk_code = getattr(row, "ts_code")
-            stk_profit = getattr(row, "profit")
-            if stk_daily not in res_weight:
+            stk_profit = getattr(row, "profit_daily")
+            if stk_code in stk_weight_df:
                 res_weight[stk_daily] = 0
                 res_weight[stk_daily] += stk_profit * stk_weight_df[stk_code]
             else:
                 res_weight[stk_daily] += stk_profit * stk_weight_df[stk_code]
+    
         res_weight_df = pd.DataFrame(res_weight).reset_index(names='dailyRet')
         return res_weight_df
 
