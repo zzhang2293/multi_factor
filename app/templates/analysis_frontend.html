@@ -21,7 +21,7 @@
    
       <el-form ref="form" :model="form" label-width="140px">
         <el-form-item label="股票分组数">
-          <el-col :span="8">
+          <el-col :span=8>
             <el-input v-model="form.group"></el-input>
           </el-col>
         </el-form-item>
@@ -39,12 +39,12 @@
           </el-select>
         </el-form-item>
         <el-form-item label="分析开始日期">
-          <el-col :span="11">
+          <el-col :span=11>
             <el-date-picker type="date" placeholder="选择日期" v-model="form.startDate"></el-date-picker>
           </el-col>
         </el-form-item>
         <el-form-item label="分析结束日期">
-          <el-col :span="11">
+          <el-col :span=11>
             <el-date-picker type="date" placeholder="选择日期" v-model="form.endDate"></el-date-picker>
           </el-col>
         </el-form-item>
@@ -59,70 +59,48 @@
     <hr>
 
     <el-form-item label="因子选择方式">
-      <el-select v-model="form.factorSelectMode" placeholder="请选择排序方式">
+      <el-select v-model="form.factorSelectMode" placeholder="请选择排序方式" @change="show_factor_select_mode">
         <el-option label="自选" value="manual"></el-option>
         <el-option label="智能" value="auto"></el-option>
       </el-select>
     </el-form-item>
-    <template>
-      <el-button type="primary" @click="smart_mode_metadata">智能模式参数选择</el-button>
-    </template>
 
-    <el-form-item label="因子数量" v-if="smart_mode_meta_visible">
-      <el-col :span="8">
+    <el-form-item label="因子数量" v-if="factor_select_mode_auto_visible">
+      <el-col :span=8>
         <el-input v-model="form.nFactors"></el-input>
       </el-col>
     </el-form-item>
-    <el-form-item label="优化回看周期" v-if="smart_mode_meta_visible">
-      <el-col :span="8">
+    <el-form-item label="优化回看周期" v-if="factor_select_mode_auto_visible">
+      <el-col :span=8>
         <el-input v-model="form.factorChoosePeriod"></el-input>
       </el-col>
     </el-form-item>
-
-<br>
-<br>
-    <template>
-      <el-button type="primary" @click="user_choose_factor">自选因子</el-button>
-    </template>
-    <br>
-    <el-form-item label="因子列表" v-if="user_factor_visible">
+    <el-form-item label="因子列表" v-if="factor_select_mode_manual_visible">
       <el-transfer filterable :titles="['待选', '已选']" :filter-method="filterMethod" filter-placeholder="请输入因子"
         v-model="form.factor" :data="form.factor_val"></el-transfer>
     </el-form-item>
     <br>
       <el-form-item label="因子权重方式">
-        <el-select v-model="form.factor_weight_mode" placeholder="请选择排序方式">
+        <el-select v-model="form.factor_weight_mode" placeholder="请选择排序方式" @change="show_factor_weight_mode">
           <el-option label="等权" value="equal"></el-option>
           <el-option label="智能" value="smart"></el-option>
           <el-option label="自定义" value="customized"></el-option>
         </el-select>
       </el-form-item>
 
-
-      <template>
-        <el-button type="primary" @click="save_selected_factor">自定义权重</el-button>
-      </template>
-      <br>
-      <br>
-
-      <el-form-item label="因子权重(空格隔开)" v-if="weight_table_visible">
-        <el-col span="8">
+      <el-form-item label="因子权重(空格隔开)" v-if="factor_weight_mode_customized_visible">
+        <el-col :span=8>
           <el-input v-model="form.factor_weight"></el-input>
         </el-col>
       </el-form-item>
-      <template>
-        <el-button type="primary" @click="smart_backtest">选择优化回看周期</el-button>
 
-      </template>
-      <br>
-      <br>
-      <el-form-item label="优化回看最长周期" v-if="smart_backtest_visible">
-        <el-col :span="8">
+      <el-form-item label="优化回看最长周期" v-if="factor_weight_mode_smart_visible">
+        <el-col :span=8>
           <el-input v-model="form.EvalPeriod"></el-input>
         </el-col>
       </el-form-item>
-      <el-form-item label="优化回看最短周期" v-if="smart_backtest_visible">
-        <el-col :span="8">
+      <el-form-item label="优化回看最短周期" v-if="factor_weight_mode_smart_visible">
+        <el-col :span=8>
           <el-input v-model="form.minEvalPeriod"></el-input>
         </el-col>
       </el-form-item>
@@ -245,14 +223,44 @@
           imageVisible: false,
           weight_table_visible: false,
           smart_backtest_visible: false,
-          user_factor_visible: false,
-          smart_mode_meta_visible: false,
           tableData: [],
           tableData_alpha: [],
           chart: "",
+          factor_select_mode_manual_visible: false,
+          factor_select_mode_auto_visible: false,
+          factor_weight_mode_equal_visible: false,
+          factor_weight_mode_smart_visible: false,
+          factor_weight_mode_customized_visible: false
         }
       },
       methods: {
+        show_factor_weight_mode(val){
+          if(val == "equal"){
+            this.factor_weight_mode_equal_visible = true;
+            this.factor_weight_mode_smart_visible = false;
+            this.factor_weight_mode_customized_visible = false;
+          }
+          else if (val == "smart"){
+            this.factor_weight_mode_smart_visible = true;
+            this.factor_weight_mode_equal_visible = false;
+            this.factor_weight_mode_customized_visible = false;
+          }
+          else if (val == "customized"){
+            this.factor_weight_mode_customized_visible = true;
+            this.factor_weight_mode_equal_visible = false;
+            this.factor_weight_mode_smart_visible = false;
+          }
+        },
+        show_factor_select_mode(val){
+          if (val == 'manual'){
+            this.factor_select_mode_manual_visible = true;
+            this.factor_select_mode_auto_visible = false;
+          }
+          else if (val == 'auto') {
+            this.factor_select_mode_auto_visible = true;
+            this.factor_select_mode_manual_visible = false;
+          }
+        },
         save_selected_factor() {
           this.weight_table_visible = true;
         },
@@ -554,6 +562,9 @@
             _this.form.buttonType = "primary";
             _this.weight_table_visible = false;
             _this.smart_backtest_visible = false;
+            _this.factor_select_mode_manual_visible = false;
+            _this.factor_select_mode_auto_visible = false;
+
           })
         },
         filterMethod(query, val) {

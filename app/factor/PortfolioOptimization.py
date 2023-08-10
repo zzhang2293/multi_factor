@@ -101,36 +101,7 @@ class PortfolioOpt():
         stk_lst = list(temp_df['secID'])  # 该行业入选的股票代码列表
         return stk_lst
 
-    # def PortOptWeight(self):
-    #     # 指数成分股以及目标组合按行业分类
-    #     idx_stk_clfy_w,idx_industry_wght_dict = self.industryWeight()      # 指数成分股分行业权重和 idx_industry_wght_dict dict 健行业代码 值为行业权重
-    #     target_df, target_dict =  self.industryClassfy(self.target_list)   # 目标组合按照申万一级行业分类  DataFrame "secID", "industryID"
-    #     other_df, other_dict = self.industryClassfy(self.remain_list)      # 剔除目标持仓组合后的剩余股票组合按照申万一级行业分类 DataFrame "secID", "industryID"
-    #
-    #     # 组合优化
-    #     result_s = target_df.groupby('industryID').apply(self.funcSelectStk)  # 目标持仓按行业归类 Series index为行业代码 values为股票代码列表
-    #     port_lst = []
-    #     port_wght = []
-    #
-    #     for idu_code in result_s.index:
-    #         idustry_stk_lst = result_s[idu_code]  # 申万一级行业对应的入选股票列表
-    #         try:
-    #             wght_in_index = idx_industry_wght_dict[idu_code]  # 该行业在指数中的权重
-    #         except:
-    #             print('指数成分股中没有行业：%s 的分布 忽略此行业' % idu_code)
-    #             continue
-    #         if len(idustry_stk_lst):
-    #             idustry_stk_lst_w = [wght_in_index / len(idustry_stk_lst)] * len(idustry_stk_lst)
-    #         else:
-    #             continue
-    #         port_lst.extend(idustry_stk_lst)
-    #         port_wght.extend(idustry_stk_lst_w)
-    #
-    #     # 权重归一化
-    #     wght_sum = functools.reduce(lambda x, y: x + y, port_wght)
-    #     port_lst_wght = [float(w) / wght_sum for w in port_wght]
-    #     portfolio_dict = dict(zip(port_lst, port_lst_wght))
-    #     return portfolio_dict
+
 
     def FromRemainAddStk(self,diff_stknum:int,indu_code:str,other_dict:dict):
         temp_lst = []   # 从剩余组合中挑选的某行业股票列表
@@ -139,7 +110,7 @@ class PortfolioOpt():
             try:
                indu_code_i = other_dict[i]   # 股票对应的行业
             except:
-                #print('other_dict %s 无行业分类信息'%i) #debug
+                print('other_dict %s 无行业分类信息'%i)
                 indu_code_i = None
 
             if indu_code_i == indu_code:
