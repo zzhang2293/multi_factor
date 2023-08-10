@@ -21,11 +21,7 @@
    
       <el-form ref="form" :model="form" label-width="140px">
         <el-form-item label="股票分组数">
-<<<<<<< Updated upstream:app/templates/analysis_frontend.html
           <el-col :span=8>
-=======
-          <el-col :span="8">
->>>>>>> Stashed changes:app/templates/myfirst.html
             <el-input v-model="form.group"></el-input>
           </el-col>
         </el-form-item>
@@ -43,20 +39,12 @@
           </el-select>
         </el-form-item>
         <el-form-item label="分析开始日期">
-<<<<<<< Updated upstream:app/templates/analysis_frontend.html
           <el-col :span=11>
-=======
-          <el-col :span="11">
->>>>>>> Stashed changes:app/templates/myfirst.html
             <el-date-picker type="date" placeholder="选择日期" v-model="form.startDate"></el-date-picker>
           </el-col>
         </el-form-item>
         <el-form-item label="分析结束日期">
-<<<<<<< Updated upstream:app/templates/analysis_frontend.html
           <el-col :span=11>
-=======
-          <el-col :span="11">
->>>>>>> Stashed changes:app/templates/myfirst.html
             <el-date-picker type="date" placeholder="选择日期" v-model="form.endDate"></el-date-picker>
           </el-col>
         </el-form-item>
@@ -70,7 +58,6 @@
       </el-form-item>
     <hr>
 
-<<<<<<< Updated upstream:app/templates/analysis_frontend.html
     <el-form-item label="因子选择方式">
       <el-select v-model="form.factorSelectMode" placeholder="请选择排序方式" @change="show_factor_select_mode">
         <el-option label="自选" value="manual"></el-option>
@@ -93,8 +80,6 @@
         v-model="form.factor" :data="form.factor_val"></el-transfer>
     </el-form-item>
     <br>
-=======
->>>>>>> Stashed changes:app/templates/myfirst.html
       <el-form-item label="因子权重方式">
         <el-select v-model="form.factor_weight_mode" placeholder="请选择排序方式" @change="show_factor_weight_mode">
           <el-option label="等权" value="equal"></el-option>
@@ -102,7 +87,6 @@
           <el-option label="自定义" value="customized"></el-option>
         </el-select>
       </el-form-item>
-<<<<<<< Updated upstream:app/templates/analysis_frontend.html
 
       <el-form-item label="因子权重(空格隔开)" v-if="factor_weight_mode_customized_visible">
         <el-col :span=8>
@@ -117,46 +101,6 @@
       </el-form-item>
       <el-form-item label="优化回看最短周期" v-if="factor_weight_mode_smart_visible">
         <el-col :span=8>
-=======
-      <el-form-item label="因子选择方式">
-        <el-select v-model="form.factorSelectMode" placeholder="请选择排序方式">
-          <el-option label="自选" value="manual"></el-option>
-          <el-option label="智能" value="auto"></el-option>
-        </el-select>
-      </el-form-item>
-      <template>
-        <el-button type="primary" @click="user_choose_factor">自选因子</el-button>
-      </template>
-      <br>
-      <el-form-item label="因子列表" v-if="user_factor_visible">
-        <el-transfer filterable :titles="['待选', '已选']" :filter-method="filterMethod" filter-placeholder="请输入因子"
-          v-model="form.factor" :data="form.factor_val"></el-transfer>
-      </el-form-item>
-      <template>
-        <el-button type="primary" @click="save_selected_factor">自定义权重</el-button>
-      </template>
-      <br>
-      <br>
-
-      <el-form-item label="因子权重(空格隔开)" v-if="weight_table_visible">
-        <el-col span="8">
-          <el-input v-model="form.factor_weight"></el-input>
-        </el-col>
-      </el-form-item>
-      <template>
-        <el-button type="primary" @click="smart_backtest">自定义优化回看周期</el-button>
-
-      </template>
-      <br>
-      <br>
-      <el-form-item label="优化回看最长周期" v-if="smart_backtest_visible">
-        <el-col :span="8">
-          <el-input v-model="form.EvalPeriod"></el-input>
-        </el-col>
-      </el-form-item>
-      <el-form-item label="优化回看最短周期" v-if="smart_backtest_visible">
-        <el-col :span="8">
->>>>>>> Stashed changes:app/templates/myfirst.html
           <el-input v-model="form.minEvalPeriod"></el-input>
         </el-col>
       </el-form-item>
@@ -183,10 +127,6 @@
     <template>
       <el-button :type="form.buttonType" @click="onSubmit">开始分析</el-button>
     </template>
-<<<<<<< Updated upstream:app/templates/analysis_frontend.html
-=======
-    </el-form>
->>>>>>> Stashed changes:app/templates/myfirst.html
 
     
 
@@ -283,10 +223,6 @@
           imageVisible: false,
           weight_table_visible: false,
           smart_backtest_visible: false,
-<<<<<<< Updated upstream:app/templates/analysis_frontend.html
-=======
-          user_factor_visible: false,
->>>>>>> Stashed changes:app/templates/myfirst.html
           tableData: [],
           tableData_alpha: [],
           chart: "",
@@ -298,7 +234,6 @@
         }
       },
       methods: {
-<<<<<<< Updated upstream:app/templates/analysis_frontend.html
         show_factor_weight_mode(val){
           if(val == "equal"){
             this.factor_weight_mode_equal_visible = true;
@@ -326,8 +261,6 @@
             this.factor_select_mode_manual_visible = false;
           }
         },
-=======
->>>>>>> Stashed changes:app/templates/myfirst.html
         save_selected_factor() {
           this.weight_table_visible = true;
         },
@@ -337,12 +270,9 @@
         user_choose_factor(){
           this.user_factor_visible = true;
         },
-<<<<<<< Updated upstream:app/templates/analysis_frontend.html
         smart_mode_metadata(){
           this.smart_mode_meta_visible = true;
         },
-=======
->>>>>>> Stashed changes:app/templates/myfirst.html
         onSubmit() {
           // 变成json格式
           let json_form = JSON.stringify(this.form);
@@ -632,12 +562,9 @@
             _this.form.buttonType = "primary";
             _this.weight_table_visible = false;
             _this.smart_backtest_visible = false;
-<<<<<<< Updated upstream:app/templates/analysis_frontend.html
             _this.factor_select_mode_manual_visible = false;
             _this.factor_select_mode_auto_visible = false;
 
-=======
->>>>>>> Stashed changes:app/templates/myfirst.html
           })
         },
         filterMethod(query, val) {
