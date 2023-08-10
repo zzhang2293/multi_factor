@@ -860,7 +860,7 @@ class factorModel:
             
             nameList, scoreList = [], []
 
-            FactorIndices = None
+            #FactorIndices = None
 
             #第一步：计算权重
             if self.factorWeightMode == 'smart':
@@ -871,7 +871,7 @@ class factorModel:
                     currList = currList.iloc[-self.EvalPeriod:]
                 
                 #keep only the names we want
-                currList = currList[currList.columns.intersection(factor_names)]
+                #currList = currList[currList.columns.intersection(factor_names)]
                     
                 #拿到当月和之前的因子打分（包含当月）
                 res = defaultdict(list)
@@ -910,10 +910,10 @@ class factorModel:
 
             #有权重以后，我们给每个股票算个分，然后把股票名字和分对应存起来
             for name in stock_names:
-                if self.factorSelectMode == 'auto':
-                    name, score = self.calcEquityScore(name, factorWeights, Equity_Idx_Monthly_Factor_Score, month_names[month], FactorIndices)
-                else:
-                    name, score = self.calcEquityScore(name, factorWeights, Equity_Idx_Monthly_Factor_Score, month_names[month])
+                # if self.factorSelectMode == 'auto':
+                #     name, score = self.calcEquityScore(name, factorWeights, Equity_Idx_Monthly_Factor_Score, month_names[month], FactorIndices)
+                # else:
+                name, score = self.calcEquityScore(name, factorWeights, Equity_Idx_Monthly_Factor_Score, month_names[month])
                 if name:
                     nameList.append(name)
                     scoreList.append(score)
