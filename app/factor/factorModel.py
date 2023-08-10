@@ -378,12 +378,14 @@ class factorModel:
         else:
             newIC = IC
 
-        total_map = newIC.sum().abs()
+        print(IC)
 
-        print(newIC, total_map)
+        # total_map = newIC.sum().abs()
 
-        while True:
-            pass
+        # print(newIC, total_map)
+
+        # while True:
+        #     pass
 
         # chosen_factors = total_map.nlargest(IC.shape[1])
 
@@ -859,8 +861,6 @@ class factorModel:
         for month in range((self.minEvalPeriod if self.factorWeightMode == 'smart' else 0), len(month_names)):            
             
             nameList, scoreList = [], []
-
-            FactorIndices = None
 
             currList = ICList.loc[ICList.index[ICList.index < month_names[month]]]
 
