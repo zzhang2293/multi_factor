@@ -221,8 +221,6 @@
           imageSrc: "",
           image2Src: "",
           imageVisible: false,
-          weight_table_visible: false,
-          smart_backtest_visible: false,
           tableData: [],
           tableData_alpha: [],
           chart: "",
@@ -260,18 +258,6 @@
             this.factor_select_mode_auto_visible = true;
             this.factor_select_mode_manual_visible = false;
           }
-        },
-        save_selected_factor() {
-          this.weight_table_visible = true;
-        },
-        smart_backtest(){
-          this.smart_backtest_visible = true;
-        }, 
-        user_choose_factor(){
-          this.user_factor_visible = true;
-        },
-        smart_mode_metadata(){
-          this.smart_mode_meta_visible = true;
         },
         onSubmit() {
           // 变成json格式
@@ -362,7 +348,7 @@
               data: last_alpha
             }
             alpha_data_series.push(last_Ser_alpha);
-
+            // 创建 high chart 显示数据
             Highcharts.chart('container_alpha', {
               chart: {
                 zoomType: 'x'
@@ -411,8 +397,7 @@
                 }]
               }
             });
-
-            ////////////////////////////////////
+            // 创建highchart x轴的日期
             for (let i = 0; i < groups_trans.length - 2; i++) {
               each_group = [];
               const vals = Object.values(groups_trans[i]);
@@ -432,6 +417,7 @@
 
             }
             let last = []
+            // 这里将日期放到最后，后面方便取这组数据
             const vals = Object.values(groups_trans[groups_trans.length - 2]); // the last element is date list so -2
             vals.forEach(function (element, index) {
               let correspondingDate = formattedDates[index];
@@ -494,7 +480,8 @@
                 }]
               }
             });
-            //////////////////////////////////////////////////////////////////////////////////
+            
+            // 计算IC
             let year = Object.values(resp.data.IC_val.month)
             let IC = Object.values(resp.data.IC_val.IC)
             let IC_cumulative = Object.values(resp.data.IC_val.cumulative)
@@ -564,9 +551,18 @@
 
           })
         },
+        /**
+         * 用来在穿梭框筛选因子
+         * 
+         * **/
         filterMethod(query, val) {
           return val.search.indexOf(query) > -1;
         },
+        /**
+         * 
+         * axios异步请求获取所有因子信息，将信息绑定到穿梭框里
+         * 
+         * **/
         generateData() {
           data = [];
           factors = [];
@@ -589,6 +585,10 @@
 
           })
         },
+        /**
+         * 下载压缩文件，五个文件（csv）打包到一个zip里面
+         * 
+         * **/
         download_zip() {
           axios({
             method: 'get',
@@ -605,28 +605,10 @@
             URL.revokeObjectURL(url);
 
           })
-        },
-        download_factor_zip() {
-          axios({
-            method: 'get',
-            url: 'download_factor_zip/',
-            data: "",
-            responseType: 'blob'
-          }).then(function (resp) {
-            const blob = new Blob([resp.data], { type: 'application/zip' });
-            let url = window.URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = "factor_corr.ZIP";
-            link.click()
-            URL.revokeObjectURL(url);
-
-          })
         }
-
       },
 
-      // hook, used to initialize the factor elements 
+      //钩子函数，在页面加载时调用
       mounted() {
         this.generateData()
       }
