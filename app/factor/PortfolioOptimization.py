@@ -139,7 +139,7 @@ class PortfolioOpt():
             try:
                indu_code_i = other_dict[i]   # 股票对应的行业
             except:
-                print('other_dict %s 无行业分类信息'%i)
+                #print('other_dict %s 无行业分类信息'%i) #debug
                 indu_code_i = None
 
             if indu_code_i == indu_code:
