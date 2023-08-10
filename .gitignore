@@ -4,3 +4,4 @@
 .DS_Store
 app/.DS_Store
 testbench.ipynb
+*.pyc
