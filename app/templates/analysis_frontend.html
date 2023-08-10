@@ -149,11 +149,12 @@
     <template>
       <el-button :type="form.buttonType" @click="onSubmit">开始分析</el-button>
     </template>
-    </el-form>
 
-    <!-- <img v-if="imageVisible" v-bind:src=imageSrc alt="Image" width="800px"></img>
-    <img v-if="imageVisible" v-bind:src="image2Src" alt="Image" width="1000px"></img> -->
-    <el-button type="primary" v-if="imageVisible" @click="download_zip">下载</el-button>
+    
+
+    </el-form>
+    <br>
+    <el-button type="primary" v-if="imageVisible" @click="download_zip">回测数据、相关性矩阵下载</el-button>
 
     <template>
       <el-table v-if="imageVisible" :data="tableData" style="width: 100%">

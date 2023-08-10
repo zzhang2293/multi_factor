@@ -825,6 +825,7 @@ class factorModel:
                 column = ['group', "年化超额收益率","超额最大回撤","calmar"]
         '''
 
+        curr = time.time()
         try:    
             Daily_Equity_Returns = Daily_Equity_Returns.drop(columns=['trade_data'])
         except:
@@ -851,6 +852,9 @@ class factorModel:
 
             ICList.index = month_names
             ICList.columns = factor_names
+
+        print(f'Init Complete, Time Elapsed: {time.time() - curr}')
+        curr = time.time()
         
         #每个月循环计算个股收益
         for month in range((self.minEvalPeriod if self.factorWeightMode == 'smart' else 0), len(month_names)):            
@@ -951,6 +955,9 @@ class factorModel:
             combinedIC['month'].append(month_names[month])
             combinedIC['IC'].append(currIC)
             combinedIC['cumulative'].append(totalIC)
+
+        print(f'Processing Complete, Time Elapsed: {time.time() - curr}')
+        curr = time.time()
         
         #老代码，主要用groupedProfit和benchmark_dailyret来计算每组的收益率，alpha等
         df_group_net = pd.DataFrame()   # 回测期间分组净值曲线 output
@@ -959,6 +966,9 @@ class factorModel:
         alpha_indicator_lst = []          # 回测期间分组的alpha回测指标
         groupedProfit[list(groupedProfit.keys())[-1]]['group_0'].to_csv('best_stk.csv')
         group_dailyret_dict = self.EachGroupPortRet(groupedProfit)
+
+        print(f'Profit Calc Complete, Time Elapsed: {time.time() - curr}')
+        curr = time.time()
 
         for name in group_dailyret_dict:
             # 策略回测指标
@@ -976,7 +986,9 @@ class factorModel:
 
         factor_corr_df = self.find_factor_corr_heatmap(Monthly_Factor_Score)
         factor_corr_df.to_csv('csv_result/factor_corr.csv')
-        
+
+        print(f'Finalize Complete, Time Elapsed: {time.time() - curr}')
+        curr = time.time()
         
         return combinedIC, df_group_net, df_group_alpha, df_bt_indicator, df_bt_alpha_indicator
     
