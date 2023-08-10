@@ -68,6 +68,9 @@
       <el-button type="primary" @click="smart_mode_metadata">智能模式参数选择</el-button>
     </template>
 
+    <br>
+    <br>
+
     <el-form-item label="因子数量" v-if="smart_mode_meta_visible">
       <el-col :span="8">
         <el-input v-model="form.nFactors"></el-input>
@@ -79,11 +82,10 @@
       </el-col>
     </el-form-item>
 
-<br>
-<br>
     <template>
       <el-button type="primary" @click="user_choose_factor">自选因子</el-button>
     </template>
+    <br>
     <br>
     <el-form-item label="因子列表" v-if="user_factor_visible">
       <el-transfer filterable :titles="['待选', '已选']" :filter-method="filterMethod" filter-placeholder="请输入因子"
