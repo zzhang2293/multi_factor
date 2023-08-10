@@ -625,10 +625,13 @@ class factorModel:
             #     {month1 : {group1:df, group2:df, group3:df}}
             #     每个df有三个col, 叫ts_code(股票代码) profit(日收益) trade_date(交易日)
     def CalcStkWeight(self, cur_temp_df:pd.DataFrame, current_tradedate:str, pre_tradedate:str):
+        res_group_info = [item for sub_lst in self.equityGroupsInfo[current_tradedate][1:] for item in sub_lst]
+        
         stk_weight_opt = PortfolioOpt(pre_trade_date=pre_tradedate, 
                                       target_list=self.equityGroupsInfo[current_tradedate][0], 
-                                      remain_list=self.equityGroupsInfo[current_tradedate][1:][0],#貌似是个list of list 所以加个[0] idk why
+                                      remain_list=res_group_info,#貌似是个list of list 所以加个[0] idk why
                                       api_obj=self.stkapi)
+        
         stk_weight_df = stk_weight_opt.PortOptWeight()
         res_return = defaultdict(lambda: 0)
         #res_weight = {}
