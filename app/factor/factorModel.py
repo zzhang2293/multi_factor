@@ -578,9 +578,11 @@ class factorModel:
 
             for group_name, cur_temp_df in cur_each_period.items():
                 if self.stockWeightMode == 'smart' and group_name == 'group_0':
+                    self.tempWeight = pd.DataFrame()
                     result_df = self.CalcStkWeight(cur_temp_df=cur_temp_df, current_tradedate=trade_day, pre_tradedate=self.pre_bt_tradedate[idx])
                 else:
                     result_df = cur_temp_df.groupby('trade_date')['profit_daily'].mean().reset_index(name='dailyRet')
+
                 if next_each_period:
                     next_temp_df = next_each_period.get(group_name, pd.DataFrame())
                     cur_hold = set(cur_temp_df['ts_code'])
@@ -593,8 +595,12 @@ class factorModel:
                 group_frames[group_name].append(result_df)
 
         eachgroup_show = {group_name: pd.concat(frames, ignore_index=True) for group_name, frames in group_frames.items()}
-
         
+        
+        self.tempWeight.to_csv('AugustWeight.csv')
+        cur_temp_df = cur_temp_df.drop_duplicates(subset=['ts_code', 'trade_date'])
+        cur_temp_df.pivot(index='ts_code', columns='trade_date', values='profit_daily').to_csv('AugustProfit.csv')
+
         # 计算 第一组 - 最后一组(多空对冲)
         final_group_name = "group_%s"%(self.groupnum-1)      # 最后一组的组名
         first_group_df = eachgroup_show["group_0"]           # 第一组的数据
@@ -609,7 +615,6 @@ class factorModel:
         long_short_df["ret"] = long_short_df['dailyRet'] - long_short_df['final_dailyRet']
         long_short_df = long_short_df[['trade_date','ret']]
         long_short_df.columns = ['trade_date','dailyRet']
-        # eachgroup_show["group_0"+"-"+final_group_name] = long_short_df
         eachgroup_show["longshort_hedge"] = long_short_df
 
         # 处理在遍历调仓日时，调仓日那天重复计算组合收益率的问题
@@ -630,43 +635,45 @@ class factorModel:
         dailtAdj = False
 
         if not dailtAdj:
-            if not self.optimizedIndividualStockWeight:
-                res_group_info = [item for sub_lst in self.equityGroupsInfo[current_tradedate][1:] for item in sub_lst]
+            res_group_info = [item for sub_lst in self.equityGroupsInfo[current_tradedate][1:] for item in sub_lst]
 
-                target = self.equityGroupsInfo[current_tradedate][0]
-                
-                if len(target) > 300:
-                    res_group_info = target[300:] + res_group_info
-                    target = target[:300]
-                elif len(target) < 300:
-                    missing = 300 - len(target)
-                    target = target + res_group_info[:missing]
-                    res_group_info = res_group_info[missing:]
-                
-                stk_weight_opt = PortfolioOpt(pre_trade_date=pre_tradedate, 
-                                            target_list=target, 
-                                            remain_list=res_group_info,#貌似是个list of list 所以加个[0] idk why
-                                            api_obj=self.stkapi)
-                
-                stk_weight = stk_weight_opt.PortOptWeight()
-            else:
-                stk_weight = self.optimizedIndividualStockWeight
+            target = self.equityGroupsInfo[current_tradedate][0]
+            
+            if len(target) > 300:
+                res_group_info = target[300:] + res_group_info
+                target = target[:300]
+            elif len(target) < 300:
+                missing = 300 - len(target)
+                target = target + res_group_info[:missing]
+                res_group_info = res_group_info[missing:]
+            
+            stk_weight_opt = PortfolioOpt(pre_trade_date=pre_tradedate, 
+                                        target_list=target, 
+                                        remain_list=res_group_info,#貌似是个list of list 所以加个[0] idk why
+                                        api_obj=self.stkapi)
+            
+            stk_weight = stk_weight_opt.PortOptWeight()
 
             res_return = defaultdict(lambda: 0)
+
+            tempDate = None
 
             #stk weight df长度有可能和targetlist不一样，按照这个决定第一组
             for row in cur_temp_df.itertuples():
                 date = getattr(row, "trade_date")
                 ticker = getattr(row, "ts_code")
                 profit = getattr(row, "profit_daily")
+                if date != tempDate:
+                    # new day
+                    stk_weight = {k: v / sum(stk_weight.values()) for k, v in stk_weight.items()}
+                    data_df = pd.DataFrame(stk_weight, index=[date]).transpose()
+                    
+                    self.tempWeight = self.tempWeight.join(data_df, how='outer')
+                    tempDate = date
                 if ticker in stk_weight:
                     res_return[date] += profit * stk_weight[ticker]
                     stk_weight[ticker] *= (1 + profit)
-            
-            #对stk_weight_df做个归一化
-            stk_weight = {k: v / sum(stk_weight.values()) for k, v in stk_weight.items()}
 
-            self.optimizedIndividualStockWeight = stk_weight
         else:
             res_group_info = [item for sub_lst in self.equityGroupsInfo[current_tradedate][1:] for item in sub_lst]
 
