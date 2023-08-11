@@ -176,7 +176,7 @@ class factorModel:
         def GetFactorFromDB(universe:list, factor_name_lst:list, data_date:int, stk_api:SelectFromMongo, factor_api:GetFactorFromMongoDB, Factor_IsAscending=True):
             factor_df = factor_api.GetStockFactor(data_date, universe, factor_name_lst)
             factor_df.fillna(0, inplace=True)
-            factor_df = StandarDize(WinSorizeNewMethod(factor_df))
+        #     factor_df = StandarDize(WinSorizeNewMethod(factor_df))
             cls_name = list(factor_df.columns)[0]
             factor_df.sort_index(ascending=True)
             return factor_df
@@ -629,9 +629,14 @@ class factorModel:
         res_group_info = [item for sub_lst in self.equityGroupsInfo[current_tradedate][1:] for item in sub_lst]
 
         target = self.equityGroupsInfo[current_tradedate][0]
+        
         if len(target) > 300:
             res_group_info = target[300:] + res_group_info
             target = target[:300]
+        elif len(target) < 300:
+            missing = 300 - len(target)
+            target = target + res_group_info[:missing]
+            res_group_info = res_group_info[missing:]
         
         stk_weight_opt = PortfolioOpt(pre_trade_date=pre_tradedate, 
                                       target_list=target, 
@@ -973,8 +978,8 @@ class factorModel:
         groupedProfit[list(groupedProfit.keys())[-1]]['group_0'].to_csv('best_stk.csv')
         group_dailyret_dict = self.EachGroupPortRet(groupedProfit)
 
-        with open("nameToScore.txt", 'w') as f: 
-            for name, score in zip(nameList, scoreList): 
+        with open("weightScore.txt", 'w') as f: 
+            for name, score in self.weightTemp.items(): 
                 f.write('%s:%s\n' % (name, score))
 
         print(f'Profit Calc Complete, Time Elapsed: {time.time() - curr}')
