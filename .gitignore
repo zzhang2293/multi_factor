@@ -5,3 +5,10 @@
 app/.DS_Store
 testbench.ipynb
 *.pyc
+best_stk.csv
+csv_result/alpha_indicator.csv
+csv_result/factor_corr.csv
+csv_result/grouped_month_ret.csv
+csv_result/IC_result.csv
+csv_result/indicator.csv
+csv_result/packed_files.ZIP

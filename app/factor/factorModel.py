@@ -48,6 +48,8 @@ class factorModel:
         self.factorChoosePeriod = 12 # 因子选择优化回看周期
         self.nFactors = 10 #选前n个因子
         self.equityGroupsInfo = dict() # 按调仓日分组股票名
+
+        self.optimizedIndividualStockWeight = {}
         
     def getData(self):
 
@@ -625,38 +627,75 @@ class factorModel:
 
     def CalcStkWeight(self, cur_temp_df:pd.DataFrame, current_tradedate:str, pre_tradedate:str):
         
+        dailtAdj = False
 
-        res_group_info = [item for sub_lst in self.equityGroupsInfo[current_tradedate][1:] for item in sub_lst]
+        if not dailtAdj:
+            if not self.optimizedIndividualStockWeight:
+                res_group_info = [item for sub_lst in self.equityGroupsInfo[current_tradedate][1:] for item in sub_lst]
 
-        target = self.equityGroupsInfo[current_tradedate][0]
-        
-        if len(target) > 300:
-            res_group_info = target[300:] + res_group_info
-            target = target[:300]
-        elif len(target) < 300:
-            missing = 300 - len(target)
-            target = target + res_group_info[:missing]
-            res_group_info = res_group_info[missing:]
-        
-        stk_weight_opt = PortfolioOpt(pre_trade_date=pre_tradedate, 
-                                      target_list=target, 
-                                      remain_list=res_group_info,#貌似是个list of list 所以加个[0] idk why
-                                      api_obj=self.stkapi)
-        
-        stk_weight_df = stk_weight_opt.PortOptWeight()
-        self.weightTemp = stk_weight_df
+                target = self.equityGroupsInfo[current_tradedate][0]
+                
+                if len(target) > 300:
+                    res_group_info = target[300:] + res_group_info
+                    target = target[:300]
+                elif len(target) < 300:
+                    missing = 300 - len(target)
+                    target = target + res_group_info[:missing]
+                    res_group_info = res_group_info[missing:]
+                
+                stk_weight_opt = PortfolioOpt(pre_trade_date=pre_tradedate, 
+                                            target_list=target, 
+                                            remain_list=res_group_info,#貌似是个list of list 所以加个[0] idk why
+                                            api_obj=self.stkapi)
+                
+                stk_weight = stk_weight_opt.PortOptWeight()
+            else:
+                stk_weight = self.optimizedIndividualStockWeight
 
-        
-        res_return = defaultdict(lambda: 0)
-        #res_weight = {}
-        #stk weight df长度有可能和targetlist不一样，按照这个决定第一组
-        #print(stk_weight_df, len(stk_weight_df), len(stk_weight_opt.target_list))
-        for row in cur_temp_df.itertuples():
-            date = getattr(row, "trade_date")
-            ticker = getattr(row, "ts_code")
-            profit = getattr(row, "profit_daily")
-            if ticker in stk_weight_df:
-                res_return[date] += profit * stk_weight_df[ticker]
+            res_return = defaultdict(lambda: 0)
+
+            #stk weight df长度有可能和targetlist不一样，按照这个决定第一组
+            for row in cur_temp_df.itertuples():
+                date = getattr(row, "trade_date")
+                ticker = getattr(row, "ts_code")
+                profit = getattr(row, "profit_daily")
+                if ticker in stk_weight:
+                    res_return[date] += profit * stk_weight[ticker]
+                    stk_weight[ticker] *= (1 + profit)
+            
+            #对stk_weight_df做个归一化
+            stk_weight = {k: v / sum(stk_weight.values()) for k, v in stk_weight.items()}
+
+            self.optimizedIndividualStockWeight = stk_weight
+        else:
+            res_group_info = [item for sub_lst in self.equityGroupsInfo[current_tradedate][1:] for item in sub_lst]
+
+            target = self.equityGroupsInfo[current_tradedate][0]
+            
+            if len(target) > 300:
+                res_group_info = target[300:] + res_group_info
+                target = target[:300]
+            elif len(target) < 300:
+                missing = 300 - len(target)
+                target = target + res_group_info[:missing]
+                res_group_info = res_group_info[missing:]
+            
+            stk_weight_opt = PortfolioOpt(pre_trade_date=pre_tradedate, 
+                                          target_list=target, 
+                                          remain_list=res_group_info,#貌似是个list of list 所以加个[0] idk why
+                                          api_obj=self.stkapi)
+            
+            stk_weight_df = stk_weight_opt.PortOptWeight()
+
+            res_return = defaultdict(lambda: 0)
+
+            #stk weight df长度有可能和targetlist不一样，按照这个决定第一组
+            for row in cur_temp_df.itertuples():
+                date = getattr(row, "trade_date")
+                ticker = getattr(row, "ts_code")
+                profit = getattr(row, "profit_daily")
+                if ticker in stk_weight_df:
+                    res_return[date] += profit * stk_weight_df[ticker]
 
         df = pd.DataFrame(list(res_return.items()), columns=['trade_date', 'dailyRet'])
         
@@ -977,10 +1016,6 @@ class factorModel:
         alpha_indicator_lst = []          # 回测期间分组的alpha回测指标
         groupedProfit[list(groupedProfit.keys())[-1]]['group_0'].to_csv('best_stk.csv')
         group_dailyret_dict = self.EachGroupPortRet(groupedProfit)
-
-        with open("weightScore.txt", 'w') as f: 
-            for name, score in self.weightTemp.items(): 
-                f.write('%s:%s\n' % (name, score))
 
         print(f'Profit Calc Complete, Time Elapsed: {time.time() - curr}')
         curr = time.time()
