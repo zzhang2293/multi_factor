@@ -185,7 +185,13 @@ class factorModel:
             factor_df = factor_api.GetStockFactor(data_date, universe, factor_name_lst)
             factor_df.fillna(0, inplace=True)
         #     factor_df = StandarDize(WinSorizeNewMethod(factor_df))
-            cls_name = list(factor_df.columns)[0]
+            try:
+                cls_name = list(factor_df.columns)[0]
+            except Exception as e:
+                if self.trade_freq == 'w':
+                    raise Exception('周频因子数据为空')
+                else:
+                    raise Exception(e)
             factor_df.sort_index(ascending=True)
             return factor_df
 
