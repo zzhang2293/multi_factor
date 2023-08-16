@@ -1,9 +1,3 @@
-'''
-TODO
-- 周 周期支持
-- 智能选因子
-'''
-
 from collections import Counter
 import numpy.linalg as nlg 
 import numpy as np
@@ -18,7 +12,6 @@ import warnings
 from collections import defaultdict
 import math
 import numpy as np
-from scipy.stats import spearmanr
 from app.factor.PortfolioOptimization import PortfolioOpt
 
 class factorModel:
@@ -27,8 +20,8 @@ class factorModel:
         self.groupnum = 10         # 股票分组数
         self.trade_freq = 'm'      # 交易频率 "m" or "w"b
         self.end = '20230809'      # 因子分析结束日期
-        self.start = '20201220' #hardcode this
-        self.factor_name_lst = []
+        self.start = '20230101' #hardcode this
+        self.factor_name_lst = ['Analyst_factor', 'NegMktValue', 'technology_factor']
         
         self.universe_index = ['000852.SH', '000905.SH', '000300.SH', '399303.SZ']
         self.universe = []             # 股票池列表
@@ -51,7 +44,7 @@ class factorModel:
         self.userDefinedFactorWeights = [] #用户自定义因子权重存在这里
 
         self.factorSelectMode = 'manual' # 因子选择模式
-        self.factorChoosePeriod = 12 # 因子选择优化回看周期
+        self.factorChoosePeriod = 6 # 因子选择优化回看周期
         self.nFactors = 10 #选前n个因子
         self.equityGroupsInfo = dict() # 按调仓日分组股票名
 
@@ -63,6 +56,20 @@ class factorModel:
 
         if self.factorSelectMode == 'auto':
             self.factor_name_lst = self.allfactorname_lst
+        
+        if self.trade_freq == 'w':
+            res = pd.read_csv("MonthFactor.csv")
+            monthOnlyFactors = [x for x in res['names']]
+            res = []
+            
+            for i in monthOnlyFactors:
+                if i not in self.factor_name_lst:
+                    res.append(i)
+            if res:
+                raise Exception(f"以下月度因子似乎不存在？{res}")
+            self.factor_name_lst = list(filter(lambda i: i not in monthOnlyFactors, self.factor_name_lst))
+
+        print('Avail Factor: ', len(self.factor_name_lst))
 
         '''
         get_val:
@@ -90,7 +97,6 @@ class factorModel:
             stk_holdret_monthly = StockHoldRet(stock_daily_profit) # monthly profit, use for analysis
 
             df_f2 = pd.merge(df_f2, stk_holdret_monthly, left_index=True, right_index=True)
-        
             
             for val in df_f2['profit_month']:
                 if math.isnan(val):
@@ -185,13 +191,7 @@ class factorModel:
             factor_df = factor_api.GetStockFactor(data_date, universe, factor_name_lst)
             factor_df.fillna(0, inplace=True)
         #     factor_df = StandarDize(WinSorizeNewMethod(factor_df))
-            try:
-                cls_name = list(factor_df.columns)[0]
-            except Exception as e:
-                if self.trade_freq == 'w':
-                    raise Exception('周频因子数据为空')
-                else:
-                    raise Exception(e)
+            cls_name = list(factor_df.columns)[0]
             factor_df.sort_index(ascending=True)
             return factor_df
 
@@ -341,11 +341,7 @@ class factorModel:
                         self.universe, self.universe_index, self.factor_name_lst, 
                         item, all_period_data, self.stkapi, self.factor_api, delete_list)
                 
-
-            
             equity_idx_monthly_equity_returns, monthly_equity_returns, monthly_factor_score, equity_idx_monthly_factor_score = transform_data(all_period_data, self.factor_name_lst)
-
-            factor_names = list(monthly_factor_score.keys())
 
             return equity_idx_monthly_equity_returns, monthly_equity_returns, monthly_factor_score, equity_idx_monthly_factor_score, self.daily_profit, BenchmarkDailyPct()
     
@@ -392,18 +388,20 @@ class factorModel:
         else:
             newIC = IC
 
-        total_map = newIC.sum().abs()
+        '''
+        优化方式
+        '''    
+        sharpe_ratio = newIC.mean() / newIC.std()
+        largestNames = sharpe_ratio.nlargest(int(self.nFactors)).index.tolist()
+        largestIndices = [list(newIC.columns).index(factor) for factor in largestNames]
+        '''
+        -----------
+        ''' 
 
-        print(newIC, total_map)
-
-        while True:
-            pass
-
-        # chosen_factors = total_map.nlargest(IC.shape[1])
-
-        # indices = [list(newIC.columns).index(factor) for factor in chosen_factors.index]
- 
-        # return list(chosen_factors.index), indices                
+        return largestNames, largestIndices  
+        #largestNames -> list(str), 已选择的因子名称
+        #largestIndices -> list(int), 已选择的因子在所有因子里的索引
+        # 两个list的顺序要对上   
 
     def calcFactorWeights(self, mode, listOfFactors, listOfCategories = None, HistoricalIC = None, equityScore = None): #docs done
 
@@ -530,7 +528,6 @@ class factorModel:
             sort_index = np.argsort(equityScoreList)[::-1]
         elif self.rankLowestFirst == "1":
             sort_index = np.argsort(equityScoreList)
-            
         
         sortedNames = np.array(equityNameList)[sort_index]
         
@@ -868,10 +865,11 @@ class factorModel:
         groupedProfit = defaultdict(dict)
         totalIC = 0
         combinedIC = {'month': [], 'IC': [], 'cumulative': []}
+        factorIndices = None
 
         #如果要优化，则需要计算各因子IC
         #优化模式下 权重每个月都不一样，会在下面的循环中计算，这里只是计算IC
-        if self.factorWeightMode == 'smart':
+        if self.factorWeightMode == 'smart' or self.factorSelectMode == 'auto':
             
             ICList = []
 
@@ -884,24 +882,38 @@ class factorModel:
 
         print(f'Init Complete, Time Elapsed: {time.time() - curr}')
         curr = time.time()
+
+        if self.factorWeightMode != 'smart' and self.factorSelectMode != 'auto':
+            startPeriod = 0
+        elif self.factorWeightMode == 'smart' or self.factorSelectMode == 'auto':
+            if self.factorWeightMode == 'smart' and self.factorSelectMode != 'auto':
+                startPeriod = int(self.minEvalPeriod)
+            elif self.factorWeightMode != 'smart' and self.factorSelectMode == 'auto':
+                startPeriod = int(self.factorChoosePeriod)
+            elif self.factorWeightMode == 'smart' and self.factorSelectMode == 'auto':
+                startPeriod = max(int(self.minEvalPeriod), int(self.factorChoosePeriod))
         
-        #每个月循环计算个股收益
-        for month in range((self.minEvalPeriod if self.factorWeightMode == 'smart' else 0), len(month_names)):            
+        if startPeriod >= len(month_names) - 1:
+            raise Exception('时间太短，无法计算！')
+        
+        print(f'starting at t = {month_names[startPeriod]}')
+        
+        for month in range(startPeriod, len(month_names)):            
             
             nameList, scoreList = [], []
 
-            #FactorIndices = None
-
+            if self.factorWeightMode == 'smart' or self.factorSelectMode == 'auto':
+                #拿到之前的IC值（不包含当月）
+                currList = ICList.loc[ICList.index[ICList.index < month_names[month]]]
+                factor_names, factorIndices = self.chooseFactors(currList)
+                currList = currList[currList.columns.intersection(factor_names)]
+            
             #第一步：计算权重
             if self.factorWeightMode == 'smart':
                 #拿到之前的IC值（不包含当月）
-                currList = ICList.loc[ICList.index[ICList.index < month_names[month]]]
 
                 if currList.shape[0] > self.EvalPeriod:
                     currList = currList.iloc[-self.EvalPeriod:]
-                
-                #keep only the names we want
-                #currList = currList[currList.columns.intersection(factor_names)]
                     
                 #拿到当月和之前的因子打分（包含当月）
                 res = defaultdict(list)
@@ -937,10 +949,7 @@ class factorModel:
 
             #有权重以后，我们给每个股票算个分，然后把股票名字和分对应存起来
             for name in stock_names:
-                # if self.factorSelectMode == 'auto':
-                #     name, score = self.calcEquityScore(name, factorWeights, Equity_Idx_Monthly_Factor_Score, month_names[month], FactorIndices)
-                # else:
-                name, score = self.calcEquityScore(name, factorWeights, Equity_Idx_Monthly_Factor_Score, month_names[month])
+                name, score = self.calcEquityScore(name, factorWeights, Equity_Idx_Monthly_Factor_Score, month_names[month], factorIndices)
                 if name:
                     nameList.append(name)
                     scoreList.append(score)
@@ -1012,7 +1021,8 @@ class factorModel:
 
         print(f'Finalize Complete, Time Elapsed: {time.time() - curr}')
         curr = time.time()
-        
+
+        self.factor_name_lst = []
         return combinedIC, df_group_net, df_group_alpha, df_bt_indicator, df_bt_alpha_indicator
     
     # 辅助函数，用于一次跑单个测试组合
