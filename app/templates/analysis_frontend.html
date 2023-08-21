@@ -55,7 +55,7 @@
       <el-form-item label="个股权重方式">
         <el-select v-model="form.stockWeightMode" placeholder="请选择排序方式">
           <el-option label="等权" value="equal"></el-option>
-          <el-option label="智能" value="smart"></el-option>
+          <el-option label="组合中性化" value="smart"></el-option>
         </el-select>
       </el-form-item>
     <hr>
@@ -140,9 +140,9 @@
       <el-table v-if="imageVisible" :data="tableData" style="width: 100%">
         <el-table-column prop="group" label="分组" width="180">
         </el-table-column>
-        <el-table-column prop="rate" label="夏普比率" width="180">
+		<el-table-column prop="year_rate" label="年化收益率 (%)" width="180">
         </el-table-column>
-        <el-table-column prop="year_rate" label="年化收益率 (%)">
+         <el-table-column prop="rate" label="夏普比率" width="180">
         </el-table-column>
         <el-table-column prop="max" label="最大回撤 (%)">
         </el-table-column>
@@ -156,7 +156,7 @@
         </el-table-column>
         <el-table-column prop="rate" label="年化超额收益率 (%)" width="180">
         </el-table-column>
-        <el-table-column prop="max_drawdown" label="超额最大回撤 (%)">
+        <el-table-column prop="max_drawdown" label="超额最大回撤 (%)" width="180">
         </el-table-column>
         <el-table-column prop="calmar" label="calmar">
         </el-table-column>

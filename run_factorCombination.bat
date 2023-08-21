@@ -1,0 +1,2 @@
+python factorCombination.py
+pause

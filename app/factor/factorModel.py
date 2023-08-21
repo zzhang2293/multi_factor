@@ -383,8 +383,8 @@ class factorModel:
         return dateList, ICList
     
     def chooseFactors(self, IC):
-        if IC.shape[0] > self.factorChoosePeriod:
-            newIC = IC.iloc[-self.factorChoosePeriod:]
+        if IC.shape[0] > int(self.factorChoosePeriod):
+            newIC = IC.iloc[-int(self.factorChoosePeriod):]
         else:
             newIC = IC
 
@@ -734,7 +734,10 @@ class factorModel:
 
         merge_df = pd.merge(eachgroup_dailyret,benchmark_df,on="trade_date",how="inner")  # trade_date dailyRet pct_chg
         merge_df.dropna(inplace=True)
-        merge_df["dailyAlpha"] = merge_df['dailyRet'] - merge_df['pct_chg']
+        if group_name != "longshort_hedge":
+           merge_df["dailyAlpha"] = merge_df['dailyRet'] - merge_df['pct_chg']
+        else:
+            merge_df["dailyAlpha"] = merge_df['dailyRet']
         merge_df = merge_df[['trade_date','dailyAlpha']]
         merge_df.sort_values(by="trade_date",ascending=True,inplace=True)
         merge_df.set_index("trade_date",drop=True,inplace=True)
@@ -742,7 +745,7 @@ class factorModel:
         merge_df.columns = ['accuAlpha']
 
         # 年化alpha
-        year_alpha = list(merge_df["accuAlpha"])[-1] / len(list(merge_df["accuAlpha"])) * 242
+        year_alpha = list(merge_df["accuAlpha"])[-1] / (len(list(merge_df["accuAlpha"]))) * 242
 
         # alpha 最大回撤
         df_temp_1 = merge_df.copy()
@@ -905,8 +908,9 @@ class factorModel:
             if self.factorWeightMode == 'smart' or self.factorSelectMode == 'auto':
                 #拿到之前的IC值（不包含当月）
                 currList = ICList.loc[ICList.index[ICList.index < month_names[month]]]
-                factor_names, factorIndices = self.chooseFactors(currList)
-                currList = currList[currList.columns.intersection(factor_names)]
+                if self.factorSelectMode == 'auto':
+                    factor_names, factorIndices = self.chooseFactors(currList)
+                    currList = currList[currList.columns.intersection(factor_names)]
             
             #第一步：计算权重
             if self.factorWeightMode == 'smart':
