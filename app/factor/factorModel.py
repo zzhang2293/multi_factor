@@ -18,9 +18,10 @@ class factorModel:
 
     def __init__(self):
         self.groupnum = 10         # 股票分组数
-        self.trade_freq = 'm'      # 交易频率 "m" or "w"b
-        self.end = '20230809'      # 因子分析结束日期
-        self.start = '20230101' #hardcode this
+        self.trade_freq = 'm'      # 交易频率 "m" or "w"    
+        yday = datetime.datetime.now() - datetime.timedelta(days=1)
+        self.end = yday.strftime('%Y%m%d') # 因子分析结束日期，默认是昨天
+        self.start = '20201225' #hardcode this
         self.factor_name_lst = ['Analyst_factor', 'NegMktValue', 'technology_factor']
         
         self.universe_index = ['000852.SH', '000905.SH', '000300.SH', '399303.SZ']

@@ -18,42 +18,42 @@
 </head>
 
 <body>
-  <h1>多因子分析</h1>
+  <h1>多因子策略回测分析</h1>
   <div id="app">
    
-      <el-form ref="form" :model="form" label-width="140px">
-        <el-form-item label="股票分组数">
-          <el-col :span=8>
+      <el-form ref="form" :model="form" label-width="200px">
+        <el-form-item label="股票分组数量（默认十组）">
+          <el-col :span=1>
             <el-input v-model="form.group"></el-input>
           </el-col>
         </el-form-item>
 
-        <el-form-item label="交易频率">
+        <el-form-item label="交易频率（默认月频）">
           <el-select v-model="form.freq" placeholder="请选择频率">
             <el-option label="m" value="m"></el-option>
             <el-option label="w" value="w"></el-option>
           </el-select>
         </el-form-item>
-        <el-form-item label="收益率排列方式">
+        <el-form-item label="收益率排列（默认降序）">
           <el-select v-model="form.rankLowestFirst" placeholder="请选择排序方式">
             <el-option label="升序" value="1"></el-option>
             <el-option label="降序" value="0"></el-option>
           </el-select>
         </el-form-item>
-        <el-form-item label="分析开始日期">
+        <el-form-item label="开始日期（默认20201225）">
           <el-col :span=11>
             <el-date-picker type="date" placeholder="选择日期" v-model="form.startDate"></el-date-picker>
           </el-col>
         </el-form-item>
-        <el-form-item label="分析结束日期">
+        <el-form-item label="结束日期（默认上个交易日）">
           <el-col :span=11>
             <el-date-picker type="date" placeholder="选择日期" v-model="form.endDate"></el-date-picker>
           </el-col>
         </el-form-item>
         <hr>
  
-      <el-form-item label="个股权重方式">
-        <el-select v-model="form.stockWeightMode" placeholder="请选择排序方式">
+      <el-form-item label="个股权重方式（默认等权）">
+        <el-select v-model="form.stockWeightMode" placeholder="请选择计算方式">
           <el-option label="等权" value="equal"></el-option>
           <el-option label="组合中性化" value="smart"></el-option>
         </el-select>
@@ -61,19 +61,20 @@
     <hr>
 
     <el-form-item label="因子选择方式">
-      <el-select v-model="form.factorSelectMode" placeholder="请选择排序方式" @change="show_factor_select_mode">
+      <el-select v-model="form.factorSelectMode" placeholder="请选择计算方式" @change="show_factor_select_mode">
         <el-option label="自选" value="manual"></el-option>
-        <el-option label="智能" value="auto"></el-option>
+        <el-option label="智能（最大化IC）" value="auto"></el-option>
       </el-select>
+      <span style="margin-left: 10px; color: red;">**注意：此项无默认值</span>
     </el-form-item>
 
-    <el-form-item label="因子数量" v-if="factor_select_mode_auto_visible">
-      <el-col :span=8>
+    <el-form-item label="入选因子数量（默认10）" v-if="factor_select_mode_auto_visible">
+      <el-col :span=1>
         <el-input v-model="form.nFactors"></el-input>
       </el-col>
     </el-form-item>
-    <el-form-item label="优化回看周期" v-if="factor_select_mode_auto_visible">
-      <el-col :span=8>
+    <el-form-item label="优化回看周期（默认06）" v-if="factor_select_mode_auto_visible">
+      <el-col :span=1>
         <el-input v-model="form.factorChoosePeriod"></el-input>
       </el-col>
     </el-form-item>
@@ -81,34 +82,34 @@
       <el-transfer filterable :titles="['待选', '已选']" :filter-method="filterMethod" filter-placeholder="请输入因子"
         v-model="form.factor" :data="form.factor_val"></el-transfer>
     </el-form-item>
-    <br>
-      <el-form-item label="因子权重方式">
-        <el-select v-model="form.factor_weight_mode" placeholder="请选择排序方式" @change="show_factor_weight_mode">
+
+      <el-form-item label="因子权重方式（默认等权）">
+        <el-select v-model="form.factor_weight_mode" placeholder="请选择计算方式" @change="show_factor_weight_mode">
           <el-option label="等权" value="equal"></el-option>
-          <el-option label="智能" value="smart"></el-option>
+          <el-option label="智能（协方差优化）" value="smart"></el-option>
           <el-option label="自定义" value="customized"></el-option>
         </el-select>
       </el-form-item>
 
-      <el-form-item label="因子权重(空格隔开)" v-if="factor_weight_mode_customized_visible">
+      <el-form-item label="因子权重（空格隔开）" v-if="factor_weight_mode_customized_visible">
         <el-col :span=8>
           <el-input v-model="form.factor_weight"></el-input>
         </el-col>
       </el-form-item>
 
-      <el-form-item label="优化回看最长周期" v-if="factor_weight_mode_smart_visible">
-        <el-col :span=8>
+      <el-form-item label="回看最长周期（默认4）" v-if="factor_weight_mode_smart_visible">
+        <el-col :span=1>
           <el-input v-model="form.EvalPeriod"></el-input>
         </el-col>
       </el-form-item>
-      <el-form-item label="优化回看最短周期" v-if="factor_weight_mode_smart_visible">
-        <el-col :span=8>
+      <el-form-item label="回看最短周期（默认31）" v-if="factor_weight_mode_smart_visible">
+        <el-col :span=1>
           <el-input v-model="form.minEvalPeriod"></el-input>
         </el-col>
       </el-form-item>
    
    <hr>
-      <el-form-item label="股票池范围">
+      <el-form-item label="股票池范围（默认全选）">
         <el-checkbox-group v-model="form.scope">
           <el-checkbox label="000852.SH" name="scope"></el-checkbox>
           <el-checkbox label="000905.SH" name="scope"></el-checkbox>
@@ -116,8 +117,8 @@
           <el-checkbox label="399303.SZ" name="scope"></el-checkbox>
         </el-checkbox-group>
       </el-form-item>
-      <el-form-item label="benchmark">
-        <el-select v-model="form.benchmark" placeholder="请选择排序方式">
+      <el-form-item label="对比标的（默认000905）">
+        <el-select v-model="form.benchmark" placeholder="请选择对比标的">
           <el-option label="000852.SH" value="000852.SH"></el-option>
           <el-option label="000905.SH" value="000905.SH"></el-option>
           <el-option label="000300.SH" value="000300.SH"></el-option>
