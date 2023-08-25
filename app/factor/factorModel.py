@@ -11,16 +11,18 @@ import datetime
 import warnings
 from collections import defaultdict
 import math
-import numpy as np
 from app.factor.PortfolioOptimization import PortfolioOpt
+import copy
+from tqdm import tqdm
+import csv
 
 class factorModel:
 
     def __init__(self):
         self.groupnum = 10         # 股票分组数
         self.trade_freq = 'm'      # 交易频率 "m" or "w"    
-        yday = datetime.datetime.now() - datetime.timedelta(days=1)
-        self.end = yday.strftime('%Y%m%d') # 因子分析结束日期，默认是昨天
+        yday = datetime.datetime.now()
+        self.end = yday.strftime('%Y%m%d') # 因子分析结束日期，默认是今天
         self.start = '20201225' #hardcode this
         self.factor_name_lst = ['Analyst_factor', 'NegMktValue', 'technology_factor']
         
@@ -38,8 +40,8 @@ class factorModel:
         self.factorWeightMode = 'equal'  #选因子权重的模式
         self.stockWeightMode = 'equal'   #选个股权重的模式
         self.factorCategories = [] #人工给因子分组的话会存在这里
-        self.EvalPeriod = 31 # 因子权重优化最长回看周期
-        self.minEvalPeriod = 4 # 因子权重优化最短回看周期
+        self.EvalPeriod = 12 # 因子权重优化最长回看周期
+        self.minEvalPeriod = 6 # 因子权重优化最短回看周期
         self.benchmark = '000905.SH' # 对比标的
         self.rankLowestFirst = "0" #升序还是倒序，0为升序
         self.userDefinedFactorWeights = [] #用户自定义因子权重存在这里
@@ -50,6 +52,8 @@ class factorModel:
         self.equityGroupsInfo = dict() # 按调仓日分组股票名
 
         self.optimizedIndividualStockWeight = {}
+
+        self.minFactorScoreLookbackMonth = 12
         
     def getData(self):
 
@@ -495,7 +499,7 @@ class factorModel:
         if equityName in scoresMap:
             if month in scoresMap[equityName]:
                 #用np.dot 计算两个list的向量内积
-                if not indices:
+                if indices == None:
                     return (equityName, np.dot(weights, scoresMap[equityName][month]))
                 else:
                     return (equityName, np.dot(weights, [scoresMap[equityName][month][i] for i in indices]))
@@ -582,11 +586,6 @@ class factorModel:
                 group_frames[group_name].append(result_df)
 
         eachgroup_show = {group_name: pd.concat(frames, ignore_index=True) for group_name, frames in group_frames.items()}
-        
-        
-        #self.tempWeight.to_csv('AugustWeight.csv')
-        
-        #self.tempProfit.to_csv('AugustProfit.csv')
 
         # 计算 第一组 - 最后一组(多空对冲)
         final_group_name = "group_%s"%(self.groupnum-1)      # 最后一组的组名
@@ -611,15 +610,13 @@ class factorModel:
             eachgroup_show[key] = df_value
 
         return eachgroup_show
-    
 
-            # dict - groupedProfit
-            #     {month1 : {group1:df, group2:df, group3:df}}
-            #     每个df有三个col, 叫ts_code(股票代码) profit(日收益) trade_date(交易日)
+        # dict - groupedProfit
+        #     {month1 : {group1:df, group2:df, group3:df}}
+        #     每个df有三个col, 叫ts_code(股票代码) profit(日收益) trade_date(交易日)
 
     def CalcStkWeight(self, cur_temp_df:pd.DataFrame, current_tradedate:str, pre_tradedate:str):
         
-
         res_group_info = [item for sub_lst in self.equityGroupsInfo[current_tradedate][1:] for item in sub_lst]
 
         target = self.equityGroupsInfo[current_tradedate][0]
@@ -794,8 +791,8 @@ class factorModel:
         return data
 
     # 辅助函数，用于一次跑多个测试组合
-    def calculate(self, Equity_Idx_Monthly_Equity_Returns, Monthly_Equity_Returns, Monthly_Factor_Score, Equity_Idx_Monthly_Factor_Score:dict, Daily_Equity_Returns, benchmark_dailyret): #docs done
-
+    def calculate(self, Equity_Idx_Monthly_Equity_Returns, Monthly_Equity_Returns, Monthly_Factor_Score, Equity_Idx_Monthly_Factor_Score, Daily_Equity_Returns, benchmark_dailyret, factor_names = None, month_names = None, main = True, factor_idx = None, endTimeAdj = None): #docs done
+        
         '''
             函数: calculate
             -------
@@ -861,15 +858,86 @@ class factorModel:
         except:
             pass
 
-        factor_names = list(Monthly_Factor_Score.keys())
-        month_names = list(Monthly_Equity_Returns.keys())
-        self.month_names = month_names
+        factor_names = factor_names if factor_names else list(Monthly_Factor_Score.keys())
+        month_names = month_names if month_names else list(Monthly_Equity_Returns.keys()) 
         stock_names = list(Equity_Idx_Monthly_Factor_Score.keys())
-        #minMonths = 2
+
+        if main:
+            startTime = time.time()
+
+            month_score_copy = copy.deepcopy(Monthly_Factor_Score)
+            equity_idx_month_score_copy = copy.deepcopy(Equity_Idx_Monthly_Factor_Score)
+
+            print(self.bt_tradedate)
+
+            for idx, factor in enumerate(self.factor_name_lst):
+
+                print(f'-----FACTOR: {factor}------')
+
+                # for i in tqdm(range(self.minFactorScoreLookbackMonth, len(self.bt_tradedate))):
+                for i in tqdm(range(2, len(self.bt_tradedate))):
+                    # period = self.bt_tradedate[i-self.minFactorScoreLookbackMonth:i]
+                    period = self.bt_tradedate[:i]
+                    
+                    endDate = self.pre_bt_tradedate[i]
+                    month = self.bt_tradedate[i]
+
+                    #用新的还是老的？
+                    _, _, _, _, df_bt_alpha_indicator = self.calculate(Equity_Idx_Monthly_Equity_Returns, Monthly_Equity_Returns, month_score_copy, equity_idx_month_score_copy, Daily_Equity_Returns, benchmark_dailyret,
+                                                                                    month_names = period,
+                                                                                    main = False,
+                                                                                    endTimeAdj = endDate,
+                                                                                    factor_idx=[idx],
+                                                                                    factor_names = [factor])
+
+                    df_bt_alpha_indicator = df_bt_alpha_indicator[:-1]
+                    bestGroup = df_bt_alpha_indicator['calmar'].idxmax()
+                    print(df_bt_alpha_indicator)
+                    print(f'for factor {factor} @ {month}, best group is {bestGroup}, calmar is {df_bt_alpha_indicator.iloc[bestGroup]["calmar"]}')
+
+                    if bestGroup == 0:
+                        continue
+
+                    #上面我们看了1-6月的数据 找到了最好的组数量
+                    #下面要看7月份的分组，去看组x里的股票是什么，然后把7月权重改了
+                    nameList, scoreList = [], []
+                    for name in stock_names:
+                        name, score = self.calcEquityScore(name, [1], equity_idx_month_score_copy, month, [idx])
+                        if name:
+                            nameList.append(name)
+                            scoreList.append(score)
+                    equityGroups = self.rankEquity(nameList, scoreList)
+
+                    stocksToAdjust = equityGroups[bestGroup] #要调整的股票名字
+                    self.finalStocksToAdjust = stocksToAdjust
+                    self.finalGrouprank = bestGroup
+
+                    #getting the stocks that are avail this month
+                    currMonthkeys = [k for k, v in equity_idx_month_score_copy.items() if month in v]
+                    
+                    #getting the keys of those stocks to adjust of all stocks
+                    keyOfStocks = [currMonthkeys.index(i) for i in stocksToAdjust]
+                    
+                    #adjust Monthly_Factor_Score of all of those stocks to be larger
+                    currMonthFactorScore = Monthly_Factor_Score[factor][month]
+                    for i in keyOfStocks:
+                        currMonthFactorScore[i] += 10000
+                    currMonthFactorScore = (currMonthFactorScore - np.mean(currMonthFactorScore)) / np.std(currMonthFactorScore)
+                    Monthly_Factor_Score[factor][month] = currMonthFactorScore
+
+                    #adjust Equity_Idx_Monthly_Factor_Score
+                    for stock, stockidx in zip(stocksToAdjust, keyOfStocks):
+                        Equity_Idx_Monthly_Factor_Score[stock][month][idx] = Monthly_Factor_Score[factor][month][stockidx]
+                    
+                    #to list, maintain consistency
+                    Monthly_Factor_Score[factor][month] = Monthly_Factor_Score[factor][month].tolist()
+            
+            print('factor score adjust complete, time elapsed: ', time.time() - startTime)
+
         groupedProfit = defaultdict(dict)
         totalIC = 0
         combinedIC = {'month': [], 'IC': [], 'cumulative': []}
-        factorIndices = None
+        factorIndices = factor_idx
 
         #如果要优化，则需要计算各因子IC
         #优化模式下 权重每个月都不一样，会在下面的循环中计算，这里只是计算IC
@@ -884,7 +952,7 @@ class factorModel:
             ICList.index = month_names
             ICList.columns = factor_names
 
-        print(f'Init Complete, Time Elapsed: {time.time() - curr}')
+        if main: print(f'Init Complete, Time Elapsed: {time.time() - curr}')
         curr = time.time()
 
         if self.factorWeightMode != 'smart' and self.factorSelectMode != 'auto':
@@ -897,12 +965,11 @@ class factorModel:
             elif self.factorWeightMode == 'smart' and self.factorSelectMode == 'auto':
                 startPeriod = max(int(self.minEvalPeriod), int(self.factorChoosePeriod))
         
-        if startPeriod >= len(month_names) - 1:
+        print("debug", startPeriod, month_names)
+        if startPeriod > len(month_names) - 1:
             raise Exception('时间太短，无法计算！')
         
-        print(f'starting at t = {month_names[startPeriod]}')
-        
-        for month in range(startPeriod, len(month_names)):            
+        for month in range(startPeriod, len(month_names)):           
             
             nameList, scoreList = [], []
 
@@ -962,6 +1029,24 @@ class factorModel:
             #根据分数给股票分成n组
             self.equityGroupsInfo[month_names[month]] = self.rankEquity(nameList, scoreList)
             equityGroups = self.rankEquity(nameList, scoreList)
+
+            # if main:
+            #     self.group_0 = equityGroups[0]
+            #     self.group_fipped_otherwise = equityGroups[self.finalGrouprank]
+            #     with open('optimized_group_0.csv', 'w') as f:
+            #         writer = csv.writer(f)
+            #         for val in self.group_0:
+            #             writer.writerow([val])
+
+            #     with open('optimized_group_other.csv', 'w') as f:
+            #         writer = csv.writer(f)
+            #         for val in self.group_fipped_otherwise:
+            #             writer.writerow([val])
+
+            #     with open('best_group_during_optimization.csv', 'w') as f:
+            #         writer = csv.writer(f)
+            #         for val in self.finalStocksToAdjust:
+            #             writer.writerow([val])
             
             #变化数据结构，方便后面计算 
             '''
@@ -974,7 +1059,12 @@ class factorModel:
                 daily_returns_this_month = Daily_Equity_Returns[(Daily_Equity_Returns['trade_date'] >= month_names[month]) 
                                     & (Daily_Equity_Returns['trade_date'] < month_names[month+1])]
             except:
-                daily_returns_this_month = Daily_Equity_Returns[Daily_Equity_Returns['trade_date'] >= month_names[month]]
+                if not endTimeAdj:
+                    daily_returns_this_month = Daily_Equity_Returns[Daily_Equity_Returns['trade_date'] >= month_names[month]]
+                elif endTimeAdj:
+                    daily_returns_this_month = Daily_Equity_Returns[(Daily_Equity_Returns['trade_date'] >= month_names[month]) 
+                                    & (Daily_Equity_Returns['trade_date'] <= endTimeAdj)]
+                #daily equities returns 是所有的，但是我给的month names不是
             
             for i, group in enumerate(equityGroups):
                 # Filter df where 'ts_code' is in the current group
@@ -993,7 +1083,7 @@ class factorModel:
             combinedIC['IC'].append(currIC)
             combinedIC['cumulative'].append(totalIC)
 
-        print(f'Processing Complete, Time Elapsed: {time.time() - curr}')
+        if main: print(f'Processing Complete, Time Elapsed: {time.time() - curr}')
         curr = time.time()
         
         #老代码，主要用groupedProfit和benchmark_dailyret来计算每组的收益率，alpha等
@@ -1004,7 +1094,7 @@ class factorModel:
         groupedProfit[list(groupedProfit.keys())[-1]]['group_0'].to_csv('best_stk.csv')
         group_dailyret_dict = self.EachGroupPortRet(groupedProfit)
 
-        print(f'Profit Calc Complete, Time Elapsed: {time.time() - curr}')
+        if main: print(f'Profit Calc Complete, Time Elapsed: {time.time() - curr}')
         curr = time.time()
 
         for name in group_dailyret_dict:
@@ -1021,14 +1111,19 @@ class factorModel:
         df_bt_indicator = pd.DataFrame(indicator_lst,index = range(len(indicator_lst)),columns=["group","年化收益率","夏普比率","最大回撤"]) # 回测期间分组的回测指标 output
         df_bt_alpha_indicator = pd.DataFrame(alpha_indicator_lst,index=range(len(alpha_indicator_lst)),columns=["group","年化超额收益率","超额最大回撤","calmar"])  # 超额评价指标 new output
 
-        factor_corr_df = self.find_factor_corr_heatmap(Monthly_Factor_Score)
-        factor_corr_df.to_csv('csv_result/factor_corr.csv')
+        if main:
+            factor_corr_df = self.find_factor_corr_heatmap(Monthly_Factor_Score)
+            factor_corr_df.to_csv('csv_result/factor_corr.csv')
 
-        print(f'Finalize Complete, Time Elapsed: {time.time() - curr}')
+        if main: print(f'Finalize Complete, Time Elapsed: {time.time() - curr}')
         curr = time.time()
 
         self.factor_name_lst = []
+
+        df_group_alpha
+ 
         return combinedIC, df_group_net, df_group_alpha, df_bt_indicator, df_bt_alpha_indicator
+    
     
     # 辅助函数，用于一次跑单个测试组合
     def run(self): #docs done
@@ -1036,4 +1131,4 @@ class factorModel:
         start = time.time()
         Equity_Idx_Monthly_Equity_Returns, Monthly_Equity_Returns, Monthly_Factor_Score, Equity_Idx_Monthly_Factor_Score, Daily_Equity_Returns, benchmark_dailyret = self.getData()
         print(('Finished collecting data, time = ', time.time() - start))
-        return self.calculate(Equity_Idx_Monthly_Equity_Returns, Monthly_Equity_Returns, Monthly_Factor_Score, Equity_Idx_Monthly_Factor_Score, Daily_Equity_Returns, benchmark_dailyret)
+        return self.calculate(Equity_Idx_Monthly_Equity_Returns, Monthly_Equity_Returns, Monthly_Factor_Score, Equity_Idx_Monthly_Factor_Score, Daily_Equity_Returns, benchmark_dailyret, main=True)
