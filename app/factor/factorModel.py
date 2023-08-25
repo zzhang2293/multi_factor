@@ -14,7 +14,7 @@ import math
 from app.factor.PortfolioOptimization import PortfolioOpt
 import copy
 from tqdm import tqdm
-import csv
+
 
 class factorModel:
 
@@ -50,10 +50,11 @@ class factorModel:
         self.factorChoosePeriod = 6 # 因子选择优化回看周期
         self.nFactors = 10 #选前n个因子
         self.equityGroupsInfo = dict() # 按调仓日分组股票名
-
         self.optimizedIndividualStockWeight = {}
 
-        self.minFactorScoreLookbackMonth = 12
+        self.adjustFactorScore = True
+        self.adjustAllGroups = True
+        self.minFactorScoreLookbackMonth = 4 #调因子分数
         
     def getData(self):
 
@@ -862,7 +863,7 @@ class factorModel:
         month_names = month_names if month_names else list(Monthly_Equity_Returns.keys()) 
         stock_names = list(Equity_Idx_Monthly_Factor_Score.keys())
 
-        if main:
+        if self.adjustFactorScore and main:
             startTime = time.time()
 
             month_score_copy = copy.deepcopy(Monthly_Factor_Score)
@@ -874,10 +875,8 @@ class factorModel:
 
                 print(f'-----FACTOR: {factor}------')
 
-                # for i in tqdm(range(self.minFactorScoreLookbackMonth, len(self.bt_tradedate))):
-                for i in tqdm(range(2, len(self.bt_tradedate))):
-                    # period = self.bt_tradedate[i-self.minFactorScoreLookbackMonth:i]
-                    period = self.bt_tradedate[:i]
+                for i in tqdm(range(self.minFactorScoreLookbackMonth, len(self.bt_tradedate))):
+                    period = self.bt_tradedate[i-self.minFactorScoreLookbackMonth:i]
                     
                     endDate = self.pre_bt_tradedate[i]
                     month = self.bt_tradedate[i]
@@ -892,8 +891,11 @@ class factorModel:
 
                     df_bt_alpha_indicator = df_bt_alpha_indicator[:-1]
                     bestGroup = df_bt_alpha_indicator['calmar'].idxmax()
+                    #sorted index from big to small based on the column calmar
+                    sortedIndex = df_bt_alpha_indicator['calmar'].sort_values(ascending=False).index
+
                     print(df_bt_alpha_indicator)
-                    print(f'for factor {factor} @ {month}, best group is {bestGroup}, calmar is {df_bt_alpha_indicator.iloc[bestGroup]["calmar"]}')
+                    print(f'for factor {factor} @ {month}, best group is {bestGroup}, calmar is {df_bt_alpha_indicator.iloc[sortedIndex[0]]["calmar"]}')
 
                     if bestGroup == 0:
                         continue
@@ -908,29 +910,45 @@ class factorModel:
                             scoreList.append(score)
                     equityGroups = self.rankEquity(nameList, scoreList)
 
-                    stocksToAdjust = equityGroups[bestGroup] #要调整的股票名字
-                    self.finalStocksToAdjust = stocksToAdjust
-                    self.finalGrouprank = bestGroup
-
-                    #getting the stocks that are avail this month
+                    
                     currMonthkeys = [k for k, v in equity_idx_month_score_copy.items() if month in v]
                     
-                    #getting the keys of those stocks to adjust of all stocks
-                    keyOfStocks = [currMonthkeys.index(i) for i in stocksToAdjust]
                     
-                    #adjust Monthly_Factor_Score of all of those stocks to be larger
-                    currMonthFactorScore = Monthly_Factor_Score[factor][month]
-                    for i in keyOfStocks:
-                        currMonthFactorScore[i] += 10000
-                    currMonthFactorScore = (currMonthFactorScore - np.mean(currMonthFactorScore)) / np.std(currMonthFactorScore)
-                    Monthly_Factor_Score[factor][month] = currMonthFactorScore
+                    
+                    if self.adjustAllGroups: 
+                        for ct, tempIdx in enumerate(sortedIndex):
+                            val = equityGroups[tempIdx]
+                            keyOfStocks = [currMonthkeys.index(i) for i in val]
+                            currMonthFactorScore = Monthly_Factor_Score[factor][month]
 
-                    #adjust Equity_Idx_Monthly_Factor_Score
-                    for stock, stockidx in zip(stocksToAdjust, keyOfStocks):
-                        Equity_Idx_Monthly_Factor_Score[stock][month][idx] = Monthly_Factor_Score[factor][month][stockidx]
-                    
-                    #to list, maintain consistency
-                    Monthly_Factor_Score[factor][month] = Monthly_Factor_Score[factor][month].tolist()
+                            for i in keyOfStocks:
+                                currMonthFactorScore[i] += (self.groupnum - ct)
+                            currMonthFactorScore = (currMonthFactorScore - np.mean(currMonthFactorScore)) / np.std(currMonthFactorScore)
+                            Monthly_Factor_Score[factor][month] = currMonthFactorScore
+
+                            for stock, stockidx in zip(val, keyOfStocks):
+                                Equity_Idx_Monthly_Factor_Score[stock][month][idx] = Monthly_Factor_Score[factor][month][stockidx]
+                            
+                            Monthly_Factor_Score[factor][month] = Monthly_Factor_Score[factor][month].tolist()
+                    else:
+                        stocksToAdjust = equityGroups[sortedIndex[0]] #要调整的股票名字
+                        
+                        #getting the keys of those stocks to adjust of all stocks
+                        keyOfStocks = [currMonthkeys.index(i) for i in stocksToAdjust]
+                        
+                        #adjust Monthly_Factor_Score of all of those stocks to be larger
+                        currMonthFactorScore = Monthly_Factor_Score[factor][month]
+                        for i in keyOfStocks:
+                            currMonthFactorScore[i] += 10000
+                        currMonthFactorScore = (currMonthFactorScore - np.mean(currMonthFactorScore)) / np.std(currMonthFactorScore)
+                        Monthly_Factor_Score[factor][month] = currMonthFactorScore
+
+                        #adjust Equity_Idx_Monthly_Factor_Score
+                        for stock, stockidx in zip(stocksToAdjust, keyOfStocks):
+                            Equity_Idx_Monthly_Factor_Score[stock][month][idx] = Monthly_Factor_Score[factor][month][stockidx]
+                        
+                        #to list, maintain consistency
+                        Monthly_Factor_Score[factor][month] = Monthly_Factor_Score[factor][month].tolist()
             
             print('factor score adjust complete, time elapsed: ', time.time() - startTime)
 
@@ -1029,24 +1047,6 @@ class factorModel:
             #根据分数给股票分成n组
             self.equityGroupsInfo[month_names[month]] = self.rankEquity(nameList, scoreList)
             equityGroups = self.rankEquity(nameList, scoreList)
-
-            # if main:
-            #     self.group_0 = equityGroups[0]
-            #     self.group_fipped_otherwise = equityGroups[self.finalGrouprank]
-            #     with open('optimized_group_0.csv', 'w') as f:
-            #         writer = csv.writer(f)
-            #         for val in self.group_0:
-            #             writer.writerow([val])
-
-            #     with open('optimized_group_other.csv', 'w') as f:
-            #         writer = csv.writer(f)
-            #         for val in self.group_fipped_otherwise:
-            #             writer.writerow([val])
-
-            #     with open('best_group_during_optimization.csv', 'w') as f:
-            #         writer = csv.writer(f)
-            #         for val in self.finalStocksToAdjust:
-            #             writer.writerow([val])
             
             #变化数据结构，方便后面计算 
             '''
