@@ -16,6 +16,7 @@
     运行回测系统前需在根目录下准备一个或多个以下文件：
         MonthFactor.csv（若需要测试周频数据）
         rolling_over_factor.csv（若需要按照因子历史表现更改分组）
+        factor.csv（若需要遍历单因子）
     
     需在本文件夹根目录下运行 
         python manage.py runserver
@@ -69,6 +70,7 @@
         |-- readme.md（本文件）
         |-- MonthFactor.csv（必要输入）
         |-- rolling_over_factor.csv（必要输入）
+        |-- factor.csv (必要输入)
         |-- test.py（用于测试）
         |-- requirements.txt（运行所需的库）
         |-- factorCombination.py（使用模型运行单因子测试的函数）
