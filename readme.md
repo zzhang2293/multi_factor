@@ -98,10 +98,13 @@
                 *具体索引方式详见factorModel.py函数内注释
     
     3. 重要文件MD5值如下，请后续迭代重大版本时同时更改此值、时间
-        factorModel.py 2023/08/25 X UTC+08:00
+        factorModel.py 2023/08/25 15:19 UTC+08:00
+            b93189f0409700f44cbeae1dda7529c9
 
-        PortfolioOptimization.py 2023/08/25 X UTC+08:00
+        PortfolioOptimization.py 2023/08/25 15:19 UTC+08:00
+            7df7d54701ce9d71d6a631cc6e9fc463
 
-        analysis_frontend.html 2023/08/25 X UTC+08:00
+        analysis_frontend.html 2023/08/25 15:19 UTC+08:00
+            1d322e757af67ea7faffc787567e1b6b
 
 上次更新：2023/08/25
