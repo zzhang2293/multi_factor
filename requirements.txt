@@ -1,0 +1,6 @@
+Django==4.2.4
+numpy==1.25.0
+pandas==2.0.2
+pymongo==4.4.0
+seaborn==0.12.2
+tqdm==4.65.0

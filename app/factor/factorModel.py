@@ -15,7 +15,6 @@ from app.factor.PortfolioOptimization import PortfolioOpt
 import copy
 from tqdm import tqdm
 
-
 class factorModel:
 
     def __init__(self):
@@ -52,9 +51,11 @@ class factorModel:
         self.equityGroupsInfo = dict() # 按调仓日分组股票名
         self.optimizedIndividualStockWeight = {}
 
-        self.adjustFactorScore = True
-        self.adjustAllGroups = True
-        self.minFactorScoreLookbackMonth = 4 #调因子分数
+        self.adjustFactorScore = True # 是否基于分组调整分数
+        self.factorsToAdjust = [] # 只有这里面的因子才会被调整，如果为空则调整所有因子
+        self.adjustAllGroups = True #true则调整所有组，false只调整第一组
+        self.minFactorScoreLookbackMonth = 2 #最短看几个月
+        self.maxFactorScoreLookbackMonth = 100 #最长多少，会自适应
         
     def getData(self):
 
@@ -66,16 +67,9 @@ class factorModel:
         if self.trade_freq == 'w':
             res = pd.read_csv("MonthFactor.csv")
             monthOnlyFactors = [x for x in res['names']]
-            res = []
-            
-            for i in monthOnlyFactors:
-                if i not in self.factor_name_lst:
-                    res.append(i)
-            if res:
-                raise Exception(f"以下月度因子似乎不存在？{res}")
             self.factor_name_lst = list(filter(lambda i: i not in monthOnlyFactors, self.factor_name_lst))
 
-        print('Avail Factor: ', len(self.factor_name_lst))
+        print('Avail Factor: ', self.factor_name_lst, len(self.factor_name_lst))
 
         '''
         get_val:
@@ -866,89 +860,96 @@ class factorModel:
         if self.adjustFactorScore and main:
             startTime = time.time()
 
+            try:
+                res = pd.read_csv("rolling_over_factor.csv")
+                self.factorsToAdjust = [x for x in res['names']]
+            except:
+                pass
+            
+            if not self.factorsToAdjust: 
+                self.factorsToAdjust = self.factor_name_lst
+
             month_score_copy = copy.deepcopy(Monthly_Factor_Score)
             equity_idx_month_score_copy = copy.deepcopy(Equity_Idx_Monthly_Factor_Score)
 
-            print(self.bt_tradedate)
+            for idx, factor in enumerate(self.factor_name_lst): #不能直接用for x in factorToAdjust 因为我们要保持顺序一致
 
-            for idx, factor in enumerate(self.factor_name_lst):
+                if factor in self.factorsToAdjust:
+                    print(f'-----FACTOR: {factor}------')
 
-                print(f'-----FACTOR: {factor}------')
+                    if self.minFactorScoreLookbackMonth >= len(self.bt_tradedate):
+                        raise Exception(f'因子分数调整时数据不够，无法回看{self.minFactorScoreLookbackMonth}期，数据只有{len(self.bt_tradedate)}期')
+                
+                    for i in tqdm(range(self.minFactorScoreLookbackMonth, len(self.bt_tradedate))):
+                        
+                        startTime = max(0, i - self.minFactorScoreLookbackMonth)
+                        period = self.bt_tradedate[startTime:i]
+                        
+                        endDate = self.pre_bt_tradedate[i]
+                        month = self.bt_tradedate[i]
 
-                for i in tqdm(range(self.minFactorScoreLookbackMonth, len(self.bt_tradedate))):
-                    period = self.bt_tradedate[i-self.minFactorScoreLookbackMonth:i]
-                    
-                    endDate = self.pre_bt_tradedate[i]
-                    month = self.bt_tradedate[i]
+                        #用新的还是老的？
+                        _, _, _, _, df_bt_alpha_indicator = self.calculate(Equity_Idx_Monthly_Equity_Returns, Monthly_Equity_Returns, month_score_copy, equity_idx_month_score_copy, Daily_Equity_Returns, benchmark_dailyret,
+                                                                                        month_names = period,
+                                                                                        main = False,
+                                                                                        endTimeAdj = endDate,
+                                                                                        factor_idx=[idx],
+                                                                                        factor_names = [factor])
 
-                    #用新的还是老的？
-                    _, _, _, _, df_bt_alpha_indicator = self.calculate(Equity_Idx_Monthly_Equity_Returns, Monthly_Equity_Returns, month_score_copy, equity_idx_month_score_copy, Daily_Equity_Returns, benchmark_dailyret,
-                                                                                    month_names = period,
-                                                                                    main = False,
-                                                                                    endTimeAdj = endDate,
-                                                                                    factor_idx=[idx],
-                                                                                    factor_names = [factor])
+                        df_bt_alpha_indicator = df_bt_alpha_indicator[:-1]
+                        sortedIndex = df_bt_alpha_indicator['calmar'].sort_values(ascending=False).index
+                        print(df_bt_alpha_indicator)
+                        print(f'for factor {factor} @ {month}, best group is {sortedIndex[0]}, calmar is {df_bt_alpha_indicator.iloc[sortedIndex[0]]["calmar"]}')
 
-                    df_bt_alpha_indicator = df_bt_alpha_indicator[:-1]
-                    bestGroup = df_bt_alpha_indicator['calmar'].idxmax()
-                    #sorted index from big to small based on the column calmar
-                    sortedIndex = df_bt_alpha_indicator['calmar'].sort_values(ascending=False).index
+                        if sortedIndex[0] == 0 and not self.adjustAllGroups:
+                            continue
+                        #上面我们看了1-6月的数据 找到了最好的组数量
+                        #下面要看7月份的分组，去看组x里的股票是什么，然后把7月权重改了
+                        nameList, scoreList = [], []
+                        for name in stock_names:
+                            name, score = self.calcEquityScore(name, [1], equity_idx_month_score_copy, month, [idx])
+                            if name:
+                                nameList.append(name)
+                                scoreList.append(score)
+                        equityGroups = self.rankEquity(nameList, scoreList)
 
-                    print(df_bt_alpha_indicator)
-                    print(f'for factor {factor} @ {month}, best group is {bestGroup}, calmar is {df_bt_alpha_indicator.iloc[sortedIndex[0]]["calmar"]}')
+                        currMonthkeys = [k for k, v in equity_idx_month_score_copy.items() if month in v]
+                        
+                        if self.adjustAllGroups: 
+                            for ct, tempIdx in enumerate(sortedIndex):
+                                val = equityGroups[tempIdx]
+                                keyOfStocks = [currMonthkeys.index(i) for i in val]
+                                currMonthFactorScore = Monthly_Factor_Score[factor][month]
+                                currMonthFactorScore = (currMonthFactorScore - np.mean(currMonthFactorScore)) / np.std(currMonthFactorScore)
 
-                    if bestGroup == 0:
-                        continue
+                                for i in keyOfStocks:
+                                    currMonthFactorScore[i] += (self.groupnum - ct)
+                                currMonthFactorScore = (currMonthFactorScore - np.mean(currMonthFactorScore)) / np.std(currMonthFactorScore)
+                                Monthly_Factor_Score[factor][month] = currMonthFactorScore
 
-                    #上面我们看了1-6月的数据 找到了最好的组数量
-                    #下面要看7月份的分组，去看组x里的股票是什么，然后把7月权重改了
-                    nameList, scoreList = [], []
-                    for name in stock_names:
-                        name, score = self.calcEquityScore(name, [1], equity_idx_month_score_copy, month, [idx])
-                        if name:
-                            nameList.append(name)
-                            scoreList.append(score)
-                    equityGroups = self.rankEquity(nameList, scoreList)
-
-                    
-                    currMonthkeys = [k for k, v in equity_idx_month_score_copy.items() if month in v]
-                    
-                    
-                    
-                    if self.adjustAllGroups: 
-                        for ct, tempIdx in enumerate(sortedIndex):
-                            val = equityGroups[tempIdx]
-                            keyOfStocks = [currMonthkeys.index(i) for i in val]
+                                for stock, stockidx in zip(val, keyOfStocks):
+                                    Equity_Idx_Monthly_Factor_Score[stock][month][idx] = Monthly_Factor_Score[factor][month][stockidx]
+                                
+                                Monthly_Factor_Score[factor][month] = Monthly_Factor_Score[factor][month].tolist()
+                        else:
+                            stocksToAdjust = equityGroups[sortedIndex[0]] #要调整的股票名字
+                            
+                            #getting the keys of those stocks to adjust of all stocks
+                            keyOfStocks = [currMonthkeys.index(i) for i in stocksToAdjust]
+                            
+                            #adjust Monthly_Factor_Score of all of those stocks to be larger
                             currMonthFactorScore = Monthly_Factor_Score[factor][month]
-
                             for i in keyOfStocks:
-                                currMonthFactorScore[i] += (self.groupnum - ct)
+                                currMonthFactorScore[i] += 10000
                             currMonthFactorScore = (currMonthFactorScore - np.mean(currMonthFactorScore)) / np.std(currMonthFactorScore)
                             Monthly_Factor_Score[factor][month] = currMonthFactorScore
 
-                            for stock, stockidx in zip(val, keyOfStocks):
+                            #adjust Equity_Idx_Monthly_Factor_Score
+                            for stock, stockidx in zip(stocksToAdjust, keyOfStocks):
                                 Equity_Idx_Monthly_Factor_Score[stock][month][idx] = Monthly_Factor_Score[factor][month][stockidx]
                             
+                            #to list, maintain consistency
                             Monthly_Factor_Score[factor][month] = Monthly_Factor_Score[factor][month].tolist()
-                    else:
-                        stocksToAdjust = equityGroups[sortedIndex[0]] #要调整的股票名字
-                        
-                        #getting the keys of those stocks to adjust of all stocks
-                        keyOfStocks = [currMonthkeys.index(i) for i in stocksToAdjust]
-                        
-                        #adjust Monthly_Factor_Score of all of those stocks to be larger
-                        currMonthFactorScore = Monthly_Factor_Score[factor][month]
-                        for i in keyOfStocks:
-                            currMonthFactorScore[i] += 10000
-                        currMonthFactorScore = (currMonthFactorScore - np.mean(currMonthFactorScore)) / np.std(currMonthFactorScore)
-                        Monthly_Factor_Score[factor][month] = currMonthFactorScore
-
-                        #adjust Equity_Idx_Monthly_Factor_Score
-                        for stock, stockidx in zip(stocksToAdjust, keyOfStocks):
-                            Equity_Idx_Monthly_Factor_Score[stock][month][idx] = Monthly_Factor_Score[factor][month][stockidx]
-                        
-                        #to list, maintain consistency
-                        Monthly_Factor_Score[factor][month] = Monthly_Factor_Score[factor][month].tolist()
             
             print('factor score adjust complete, time elapsed: ', time.time() - startTime)
 
@@ -983,7 +984,6 @@ class factorModel:
             elif self.factorWeightMode == 'smart' and self.factorSelectMode == 'auto':
                 startPeriod = max(int(self.minEvalPeriod), int(self.factorChoosePeriod))
         
-        print("debug", startPeriod, month_names)
         if startPeriod > len(month_names) - 1:
             raise Exception('时间太短，无法计算！')
         
@@ -1123,7 +1123,6 @@ class factorModel:
         df_group_alpha
  
         return combinedIC, df_group_net, df_group_alpha, df_bt_indicator, df_bt_alpha_indicator
-    
     
     # 辅助函数，用于一次跑单个测试组合
     def run(self): #docs done
